@@ -74,16 +74,16 @@ module G_round(
   
   QuadG QuadG_diagonal(
   .Clk(Clk),
-  .A_I({Vw[15],Vw[10],Vw[5],Vw[0]}),
-  .B_I({Vw[12],Vw[11],Vw[6],Vw[1]}),
-  .C_I({Vw[13],Vw[8],Vw[7],Vw[2]}),
-  .D_I({Vw[14],Vw[9],Vw[4],Vw[3]}),
+  .A_I({Vw[3],Vw[2],Vw[1],Vw[0]}),
+  .B_I({Vw[4],Vw[7],Vw[6],Vw[5]}),
+  .C_I({Vw[9],Vw[8],Vw[11],Vw[10]}),
+  .D_I({Vw[14],Vw[13],Vw[12],Vw[15]}),
   .X_I({M14_I,M12_I,M10_I,M8_I}),
   .Y_I({M15_I,M13_I,M11_I,M9_I}),
-  .A_O({V15_O, V10_O, V5_O, V0_O}),
-  .B_O({V12_O, V11_O, V6_O, V1_O}),
-  .C_O({V13_O, V8_O, V7_O, V2_O}),
-  .D_O({V14_O, V9_O, V4_O, V3_O})
+  .A_O({V3_O, V2_O, V1_O, V0_O}),
+  .B_O({V4_O, V7_O, V6_O, V5_O}),
+  .C_O({V9_O, V8_O, V11_O, V10_O}),
+  .D_O({V14_O, V13_O, V12_O, V15_O})
   );
   
 endmodule

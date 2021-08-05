@@ -1,4 +1,4 @@
-`include "defines.sv"
+`include "../src/defines.sv"
 
 module HashGenTB;  
 
@@ -13,6 +13,10 @@ module HashGenTB;
   logic [31:0] H_O [0:7];
   logic [7:0] [31:0] hw;
   
+  int fd;
+  int msg_idx = 0;
+  logic [31:0] byte_length = 0;
+  
   //initial chaining value
   genvar i;
   generate
@@ -20,28 +24,16 @@ module HashGenTB;
     begin
       assign hw[i] = IV[i];
     end
-  endgenerate
-    
-  
-  // message block
-  //m0-m15
-  genvar j;
-  generate
-    for (j = 0; j < 16; j = j + 1)
-    begin
-      assign M_I[j] = j*32'h55;
-    end
-  endgenerate
-  
+  endgenerate  
 
 
   HashGen DUT(
   .Clk(clk),
   .Strt_I(strt),
-  .BL_I(32'd64),
+  .BL_I(byte_length),
   .CS_flg_I(1'b1),
-  .CE_flg_I(1'b0),
-  .ROOT_flg_I(1'b0),
+  .CE_flg_I(1'b1),
+  .ROOT_flg_I(1'b1),
   .H_I(hw),
   .Msg0_I(M_I[0]),
   .Msg1_I(M_I[1]),
@@ -75,6 +67,19 @@ module HashGenTB;
   
   initial
   begin
+  
+    fd = $fopen("test.txt", "r");
+    
+    // Scanning for message blocks until the end of the file
+    while (!$feof(fd)) begin
+      $fscanf(fd, "%h\n", M_I[msg_idx]);
+      msg_idx++;
+      byte_length = byte_length + 4;
+    end
+    
+    // close this file handle
+    $fclose(fd);
+    
     strt = 1'b0;
     #100;
     // 1 cc start pulse

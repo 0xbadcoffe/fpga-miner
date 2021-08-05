@@ -21,30 +21,24 @@ module G_function(
   reg [31:0] C0, C1, C2, C3 = 0;
   reg [31:0] D0, D1, D2, D3 = 0;
   
-  wire [31:0] Aw_0, Dw_0, Cw_0, Bw_0;
-  wire [31:0] Aw_1, Dw_1, Cw_1, Bw_1;
-  
-  assign Aw_0 = A_I + B_I + X_I;
-  assign Dw_0 = D_I ^ Aw_0;
-  assign Cw_0 = C_I + D0;
-  assign Bw_0 = B_I ^ Cw_0;
-  
-  assign Aw_1 = A1 + B1 + Y_I;
-  assign Dw_1 = D1 + Aw_1;
-  assign Cw_1 = C1 + D2;
-  assign Bw_1 = B1 ^ Cw_1; 
-  
   
   
   always@(posedge Clk)
   begin : mix_process
+    reg [31:0] Av_0, Dv_0, Cv_0, Bv_0;
+    reg [31:0] Av_1, Dv_1, Cv_1, Bv_1;
     //1st part
-    A0 <= Aw_0;
+    Av_0 = A_I + B_I + X_I;
+    A0 <= Av_0;
+    Dv_0 = D_I ^ Av_0;
     // >>> 16
-    D0 <= {Dw_0[15:0], Dw_0[31:16]};
-    C0 <= Cw_0;
+    D0 <= {Dv_0[15:0], Dv_0[31:16]};
+    Cv_0 = C_I + D0;
+    C0 <= Cv_0;
+    
+    Bv_0 = B_I ^ Cv_0;
     // >>> 12
-    B0 <= {Bw_0[11:0], Bw_0[31:12]};
+    B0 <= {Bv_0[11:0], Bv_0[31:12]};
     // Buffering
     A1 <= A0;
     B1 <= B0;
@@ -52,10 +46,14 @@ module G_function(
     C1 <= C0;
     
     //2nd part
-    A2 <= Aw_1;
-    D2 <= {Dw_1[7:0], Dw_1[31:8]};
-    C2 <= Cw_1;
-    B2 <= {Bw_1[6:0], Bw_1[31:7]};
+    Av_1 = A1 + B1 + Y_I;
+    A2 <= Av_1;
+    Dv_1 = D1 ^ Av_1;
+    D2 <= {Dv_1[7:0], Dv_1[31:8]};
+    Cv_1 = C1 + D2;
+    C2 <= Cv_1;
+    Bv_1 = B1 ^ Cv_1; 
+    B2 <= {Bv_1[6:0], Bv_1[31:7]};
     
     //Output buffer
     A3 <= A2;

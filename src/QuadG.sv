@@ -18,7 +18,7 @@ module QuadG
   output [WIDTH-1:0] D_O
   );
   
-  wire [31:0] Aw, Bw, Cw, Dw [0:3];
+  wire [3:0][31:0] Aw, Bw, Cw, Dw;
   
   genvar i;
   
