@@ -2,7 +2,9 @@
 
 Go to the intelFpga 
 [website](https://fpgasoftware.intel.com/20.1.1/?edition=lite&product=modelsim_ae&platform=windows#tabs-2).
+
 Download ModelSim-Intel FPGA Edition (includes Starter Edition).
+
 Install it.
 
 ## Creating project and running simulation
