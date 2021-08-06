@@ -17,6 +17,8 @@ module HashGenTB;
   int msg_idx = 0;
   logic [31:0] byte_length = 0;
   
+  shortint clk_cntr = 0;
+  
   //initial chaining value
   genvar i;
   generate
@@ -65,10 +67,18 @@ module HashGenTB;
   initial clk = 0;
   always #5 clk = ~clk;
   
+  always@(posedge clk)
+  begin : clock_counter
+    if(strt)
+      clk_cntr <= 0;
+    else if(!vld)
+      clk_cntr++;
+  end
+  
   initial
   begin
   
-    fd = $fopen("test.txt", "r");
+    fd = $fopen("C:/Alephium/Git/fpga-miner/test_vectors/test.txt", "r");
     
     // Scanning for message blocks until the end of the file
     while (!$feof(fd)) begin
@@ -91,7 +101,7 @@ module HashGenTB;
     strt = 1'b1;
     #10;
     strt = 1'b0;
-    #50000;
+    #5000;
     $display("End of simulation time is %d ",$time);
     $finish;
   end
