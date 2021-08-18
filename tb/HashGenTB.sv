@@ -1,6 +1,7 @@
 `include "../src/defines.sv"
 
-module HashGenTB;  
+module HashGenTB; 
+  #(parameter BS = "fasz")
 
   localparam logic[31:0] IV [0:7] = {
     `IV_0, `IV_1, `IV_2, `IV_3,
@@ -9,8 +10,8 @@ module HashGenTB;
 
   logic clk,strt,vld;
   
-  logic [31:0] M_I [0:15];
-  logic [31:0] H_O [0:7];
+  logic [15:0] [31:0] M_I;
+  logic [7:0] [31:0] H_O;
   logic [7:0] [31:0] hw;
   
   int fd;
@@ -37,31 +38,9 @@ module HashGenTB;
   .CE_flg_I(1'b1),
   .ROOT_flg_I(1'b1),
   .H_I(hw),
-  .Msg0_I(M_I[0]),
-  .Msg1_I(M_I[1]),
-  .Msg2_I(M_I[2]),
-  .Msg3_I(M_I[3]),
-  .Msg4_I(M_I[4]),
-  .Msg5_I(M_I[5]),
-  .Msg6_I(M_I[6]),
-  .Msg7_I(M_I[7]),
-  .Msg8_I(M_I[8]),
-  .Msg9_I(M_I[9]),
-  .Msg10_I(M_I[10]),
-  .Msg11_I(M_I[11]),
-  .Msg12_I(M_I[12]),
-  .Msg13_I(M_I[13]),
-  .Msg14_I(M_I[14]),
-  .Msg15_I(M_I[15]),
+  .Msg_I(M_I),
   .Vld_O(vld),
-  .H0_O(H_O[0]),
-  .H1_O(H_O[1]),
-  .H2_O(H_O[2]),
-  .H3_O(H_O[3]),
-  .H4_O(H_O[4]),
-  .H5_O(H_O[5]),
-  .H6_O(H_O[6]),
-  .H7_O(H_O[7]) 
+  .H_O(H_O)
   );
   
   initial clk = 0;
