@@ -17,35 +17,13 @@ module HashGen
   input CE_flg_I,
   input ROOT_flg_I,
   input [7:0] [31:0] H_I,
-  input [31:0] Msg0_I,
-  input [31:0] Msg1_I,
-  input [31:0] Msg2_I,
-  input [31:0] Msg3_I,
-  input [31:0] Msg4_I,
-  input [31:0] Msg5_I,
-  input [31:0] Msg6_I,
-  input [31:0] Msg7_I,
-  input [31:0] Msg8_I,
-  input [31:0] Msg9_I,
-  input [31:0] Msg10_I,
-  input [31:0] Msg11_I,
-  input [31:0] Msg12_I,
-  input [31:0] Msg13_I,
-  input [31:0] Msg14_I,
-  input [31:0] Msg15_I,
+  input [15:0] [31:0] Msg_I,
   
   // Outputs
   output Vld_O,
   
   // Outputs
-  output [31:0] H0_O,
-  output [31:0] H1_O,
-  output [31:0] H2_O,
-  output [31:0] H3_O,
-  output [31:0] H4_O,
-  output [31:0] H5_O,
-  output [31:0] H6_O,
-  output [31:0] H7_O
+  output [7:0] [31:0] H_O
   );
   
   localparam logic[31:0] IV [0:7] = {
@@ -57,8 +35,8 @@ module HashGen
     2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8
   };
   
-  localparam shortint ROUND_DELAY = 11;
-  localparam shortint HASH_DELAY = (ROUND_NUM*ROUND_DELAY + 3);
+  localparam shortint ROUND_DELAY = 12;
+  localparam shortint HASH_DELAY = (ROUND_NUM*ROUND_DELAY) + 5;
   
   
   logic [15:0][ROUND_NUM-1:0][31:0] MsgArray;
@@ -110,23 +88,15 @@ module HashGen
     CE_flg_I, CS_flg_I
   };
   
+  
+  genvar m;
   // message assigning
-  assign MsgArray[0][0] = Msg0_I;
-  assign MsgArray[1][0] = Msg1_I;
-  assign MsgArray[2][0] = Msg2_I;
-  assign MsgArray[3][0] = Msg3_I;
-  assign MsgArray[4][0] = Msg4_I;
-  assign MsgArray[5][0] = Msg5_I;
-  assign MsgArray[6][0] = Msg6_I;
-  assign MsgArray[7][0] = Msg7_I;
-  assign MsgArray[8][0] = Msg8_I;
-  assign MsgArray[9][0] = Msg9_I;
-  assign MsgArray[10][0] = Msg10_I;
-  assign MsgArray[11][0] = Msg11_I;
-  assign MsgArray[12][0] = Msg12_I;
-  assign MsgArray[13][0] = Msg13_I;
-  assign MsgArray[14][0] = Msg14_I;
-  assign MsgArray[15][0] = Msg15_I;
+  generate  
+    for (m = 0; m < 16; m = m + 1)
+    begin : msg_assign
+      assign MsgArray[m][0] = Msg_I[m];
+    end
+  endgenerate
   
   // delay of the valid signal
   always@(posedge Clk) 
@@ -144,7 +114,7 @@ module HashGen
   // valid register
   always@(posedge Clk) 
   begin : valid_process
-    vld_reg <= ((cntr_reg == HASH_DELAY) && strt_flg);
+    vld_reg <= ((cntr_reg == HASH_DELAY) && strt_flg && !Strt_I);
   end
   
   assign Vld_O = vld_reg;
@@ -230,13 +200,6 @@ module HashGen
     end
   end
   
-  assign H0_O = hv[0];
-  assign H1_O = hv[1];
-  assign H2_O = hv[2];
-  assign H3_O = hv[3];
-  assign H4_O = hv[4];
-  assign H5_O = hv[5];
-  assign H6_O = hv[6];
-  assign H7_O = hv[7];
+  assign H_O = hv[7:0];
   
 endmodule
