@@ -17,7 +17,7 @@ module ChunkHasher
   
   // Outputs
   //FIFO outputs
-  output [9:0] Addr_O,
+  output Next_O,
   
   //final result
   output [7:0] [31:0] H_O,
@@ -55,6 +55,8 @@ module ChunkHasher
   
   // start register
   bit strt;
+  
+  bit next;
   
   //last block
   bit last_blk;
@@ -109,7 +111,7 @@ module ChunkHasher
   begin : valid_reg
     if(~Rst_n)
       vld_shr[2:1] <= 2'b00;
-    else if(upd)
+    else if(Update_I)
       vld_shr[2:1] <= 2'b00;
     else 
       vld_shr[2:1] <= vld_shr[1:0];
@@ -120,7 +122,7 @@ module ChunkHasher
   begin : valid_output
     if(~Rst_n)
       vld_out_reg  <= 1'b0;
-    else if(upd)
+    else if(Update_I)
       vld_out_reg <= 1'b0;
     else if(vld_shr[2:1]==2'b01 && last_blk)
       vld_out_reg <= 1'b1;
@@ -138,7 +140,7 @@ module ChunkHasher
     if(~Rst_n)
       strt  <= 1'b0;
     //new message block is ready or the chunk has been updated
-    else if((vld_shr[2:1]==2'b01 && !last_blk) || upd)
+    else if((vld_shr[2:1]==2'b01 && !last_blk) || Update_I)
       strt <= 1'b1;
     else
       strt <= 1'b0;
@@ -164,9 +166,16 @@ module ChunkHasher
   assign byte_left = Byte_num_I - byte_cntr;
   assign byte_len = (byte_left < 8'h40) ? {21'h00_0000, byte_left} : 32'h0000_0040;
   
-  // RAM address
-  assign Addr_O = {5'h00, byte_cntr[10:6]};
+  // Next message request
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin : next_pulse
+    if(~Rst_n)
+      next <= 0;
+    else
+      next <= (vld_shr[2:1] == 2'b01);
+  end
   
+  assign Next_O = next;
 ///////////////////////////
 // Hash output registers //
 ///////////////////////////
