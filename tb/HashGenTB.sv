@@ -1,7 +1,6 @@
 `include "../src/defines.sv"
 
 module HashGenTB; 
-  #(parameter BS = "fasz")
 
   localparam logic[31:0] IV [0:7] = {
     `IV_0, `IV_1, `IV_2, `IV_3,
