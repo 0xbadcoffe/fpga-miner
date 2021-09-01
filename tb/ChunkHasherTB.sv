@@ -16,6 +16,7 @@ module ChunkHasherTB;
   logic [15:0] [31:0] M_I;
   logic [7:0] [31:0] H_O;
   logic [7:0] [31:0] hw;
+  logic [255:0] hash;
   
   logic [9:0] addr;
   
@@ -51,6 +52,17 @@ module ChunkHasherTB;
     .Vld_O(vld[0])
   );
   
+
+  assign hash[255:224] = {<<8{H_O[0]}};
+  assign hash[223:192] = {<<8{H_O[1]}};
+  assign hash[191:160] = {<<8{H_O[2]}};
+  assign hash[159:128] = {<<8{H_O[3]}};
+  assign hash[127:96] = {<<8{H_O[4]}};
+  assign hash[95:64] = {<<8{H_O[5]}};
+  assign hash[63:32] = {<<8{H_O[6]}};
+  assign hash[31:0] = {<<8{H_O[7]}};
+
+  
   initial clk = 0;
   always #5 clk = ~clk;
   
@@ -74,11 +86,12 @@ module ChunkHasherTB;
   
     //counting the lines
     fd = $fopen(test_name, "r");
-    eof = 0;
+    eof = $feof(fd);
     
     while (!eof) begin
       $fgets(line, fd);
-      byte_length = byte_length + 4;
+      if(line!="")
+        byte_length = byte_length + 4;
       eof = $feof(fd);
     end
 
@@ -100,7 +113,9 @@ module ChunkHasherTB;
       // Scanning for message blocks until the end of the file
       while (!eof && msg_idx < 16) begin
         $fscanf(fd, "%h\n", M_I[msg_idx]);
-        msg_idx++;
+        if(byte_length > 0) begin
+          msg_idx++;
+        end
         eof = $feof(fd);
       end
       
@@ -143,7 +158,8 @@ module ChunkHasherTB;
     if(vld == 2'b01) begin
       foreach(H_O[i])
         strvar = {$sformatf("%0h ", H_O[i]), strvar};
-      $display("Final hash: %s", strvar);
+      $display("Final state: %s", strvar);
+      $display("Hash: %0h", hash);
     end
   end
   
