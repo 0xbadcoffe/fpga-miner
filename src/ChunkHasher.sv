@@ -205,7 +205,7 @@ module ChunkHasher
   end
   
   // next state decoder
-  always@(upd, vld_shr[2]) 
+  always@(upd, vld_shr[2:1], state, byte_cntr, Byte_num_I, byte_left) 
   begin : next_state_decode
     next_state <= state;
     case (state)
@@ -218,7 +218,7 @@ module ChunkHasher
       FIRST_BLOCK, MIDDLE_BLOCKS: begin
         if(upd)
           next_state <= FIRST_BLOCK;
-        else if(vld_shr[2]) begin
+        else if(vld_shr[2:1]==2'b11) begin
           if(byte_cntr >= Byte_num_I)
             next_state <= IDLE;
           // less than 64 bytes
@@ -232,7 +232,7 @@ module ChunkHasher
       LAST_BLOCK: begin
         if(upd)
           next_state <= FIRST_BLOCK;
-        else if(vld_shr[2])
+        else if(vld_shr[2:1]==2'b11)
           next_state <= IDLE;
       end//LAST_BLOCK
 
