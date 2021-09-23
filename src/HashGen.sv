@@ -35,7 +35,7 @@ module HashGen
     2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8
   };
   
-  localparam shortint ROUND_DELAY = 12;
+  localparam shortint ROUND_DELAY = 10;
   localparam shortint HASH_DELAY = (ROUND_NUM*ROUND_DELAY) + 5;
   
   
@@ -127,12 +127,13 @@ module HashGen
     for (i = 1; i < (ROUND_NUM + 1); i = i + 1)
     begin : hasher
     
-      
-      for (j = 0; j < 16; j = j + 1)
-      begin
-        always@(posedge Clk)
-        begin : message_permutation
-          MsgArray[j][i] <= MsgArray[perm_num[j]][i-1];
+      if(i < ROUND_NUM) begin
+        for (j = 0; j < 16; j = j + 1)
+        begin
+            always@(posedge Clk)
+            begin : message_permutation
+            MsgArray[j][i] <= MsgArray[perm_num[j]][i-1];
+            end
         end
       end
       
