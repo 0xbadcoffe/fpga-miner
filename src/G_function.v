@@ -16,10 +16,10 @@ module G_function(
   output [31:0] D_O
   );
   
-  reg [31:0] A0, A1, A2, A3 = 0;
-  reg [31:0] B0, B1, B2, B3 = 0;
-  reg [31:0] C0, C1, C2, C3 = 0;
-  reg [31:0] D0, D1, D2, D3 = 0;
+  reg [31:0] A0, A1, A2 = 0;
+  reg [31:0] B0, B1, B2 = 0;
+  reg [31:0] C0, C1, C2 = 0;
+  reg [31:0] D0, D1, D2 = 0;
   
   
   
@@ -55,18 +55,13 @@ module G_function(
     Bv_1 = B1 ^ Cv_1; 
     B2 <= {Bv_1[6:0], Bv_1[31:7]};
     
-    //Output buffer
-    A3 <= A2;
-    D3 <= D2;
-    C3 <= C2;
-    B3 <= B2;
     
   end
   
-  assign A_O = A3;
-  assign D_O = D3;
-  assign C_O = C3;
-  assign B_O = B3;
+  assign A_O = A2;
+  assign D_O = D2;
+  assign C_O = C2;
+  assign B_O = B2;
   
   
 endmodule
