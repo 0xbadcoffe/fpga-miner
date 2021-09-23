@@ -18,6 +18,7 @@ module AleMinerTB;
   logic [5:0][31:0] nonce_out;
   
   logic [7:0][31:0] target;
+  logic [7:0][31:0] hash;
   
   logic [31:0] byte_length = byte_num;
  
@@ -43,18 +44,19 @@ module AleMinerTB;
     .VldNonce_O(vld[0]),
     .Nonce_O(nonce_out),
     .HashCounter_O(hash_cntr),
+    .Hash_O(hash),
     .Irq_O(irq) 
   );
   
   
-  assign target[0] = 32'hffffffff;
-  assign target[1] = 32'hffffffff;
-  assign target[2] = 32'hffffffff;
-  assign target[3] = 32'hffffffff;
-  assign target[4] = 32'hffffffff;
-  assign target[5] = 32'h0fffffff;
-  assign target[6] = 32'h00000000;
-  assign target[7] = 32'h1f010000;
+  assign target[0] = 32'h0;
+  assign target[1] = 32'h1;
+  assign target[2] = 32'h2;
+  assign target[3] = 32'h3;
+  assign target[4] = 32'h4;
+  assign target[5] = 32'h5;
+  assign target[6] = 32'h6;
+  assign target[7] = 32'hf0010000;
   
   
   initial clk = 0;
@@ -151,15 +153,16 @@ module AleMinerTB;
     
     while(irq!=1'b1) begin
 
-      while(DUT.rdy_hash!= 2'b01)
+      while(DUT.rdy_hash!= 2'b11)
         @(posedge clk);
       if(DUT.Miner_i.conditions!=0) begin
-        $display("%d Nonce: %0h valid: %b", DUT.hash_cntr, nonce_out, vld);
-        $display("Final hash: %0h conditions: %b", DUT.Miner_i.hash, DUT.Miner_i.conditions);
+        $display("%d Nonce: %0h valid: %b conditions: %b", hash_cntr, (nonce_out-1), vld, DUT.Miner_i.conditions);
+        $display("Hash: %0h ", DUT.hash);
       end
       @(posedge clk);
       @(posedge clk);
     end 
+    $display("Final nonce: %0h hash: %0h ", nonce_out, {hash[7],hash[6],hash[5],hash[4],hash[3],hash[2],hash[1],hash[0]});
     #500;
     start_pulse();
     #1000;
