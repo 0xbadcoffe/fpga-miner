@@ -21,24 +21,23 @@ Start ModelSim and run the following commands:
 
 | Address Space Offset | Register Name | Access Type | Defaul Value| Description |
 | -------------------- | ------------- |------------ | ----------- | ----------- |
-| 0x0000  | UPDATE_TRIGGER | R/W | 0x0 | |
-| 0x0004  | GROUP_DIRECTIONS | R/W | 0x0 | |
-| 0x0008  | GROUPS | R/W | 0x0 | |
-| 0x000C  | CHUNK_LENGTH | R/W | 0x0 | Number of bytes in a chunk. |
-| 0x0010  | TARGET_0 | R/W | 0x0 | Target difficulty |
-| 0x0014  | TARGET_1 | R/W | 0x0 | |
-| 0x0018  | TARGET_2 | R/W | 0x0 | |
-| 0x001C  | TARGET_3 | R/W | 0x0 | |
-| 0x0020  | TARGET_4 | R/W | 0x0 | |
-| 0x0024  | TARGET_5 | R/W | 0x0 | |
-| 0x0028  | TARGET_6 | R/W | 0x0 | |
-| 0x002C  | TARGET_7 | R/W | 0x0 | |
-| 0x0030  | NONCE_0 | R/W | 0x0 | Nonce of the chunk |
-| 0x0034  | NONCE_1 | R/W | 0x0 | |
-| 0x003C  | NONCE_2 | R/W | 0x0 | |
-| 0x0040  | NONCE_3 | R/W | 0x0 | |
-| 0x0044  | NONCE_4 | R/W | 0x0 | |
-| 0x0048  | NONCE_5 | R/W | 0x0 | |
+| 0x0000  | GROUP_DIRECTIONS | R/W | 0x0 | |
+| 0x0004  | GROUPS | R/W | 0x0 | |
+| 0x0008  | CHUNK_LENGTH | R/W | 0x0 | Number of bytes in a chunk. |
+| 0x000C  | TARGET_0 | R/W | 0x0 | Target difficulty |
+| 0x0010  | TARGET_1 | R/W | 0x0 | |
+| 0x0014  | TARGET_2 | R/W | 0x0 | |
+| 0x0018  | TARGET_3 | R/W | 0x0 | |
+| 0x001C  | TARGET_4 | R/W | 0x0 | |
+| 0x0020  | TARGET_5 | R/W | 0x0 | |
+| 0x0024  | TARGET_6 | R/W | 0x0 | |
+| 0x0028  | TARGET_7 | R/W | 0x0 | |
+| 0x002C  | NONCE_0 | R/W | 0x0 | Nonce of the chunk |
+| 0x0030  | NONCE_1 | R/W | 0x0 | |
+| 0x0034  | NONCE_2 | R/W | 0x0 | |
+| 0x0038  | NONCE_3 | R/W | 0x0 | |
+| 0x003C  | NONCE_4 | R/W | 0x0 | |
+| 0x0040  | NONCE_5 | R/W | 0x0 | |
 
 ### UPDATE_TRIGGER register
 
