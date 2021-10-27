@@ -290,7 +290,7 @@ module Miner
   begin : byte_counter
     if(~Rst_n)
       byte_cntr <= NONCE_BYTE_LEN;
-    else if(vld_hash[1:0]==2'b01)
+    else if((vld_hash[1:0]==2'b01) || Update_I)
       byte_cntr <= NONCE_BYTE_LEN;
     else if(next_word)
       byte_cntr <= byte_cntr + 4;

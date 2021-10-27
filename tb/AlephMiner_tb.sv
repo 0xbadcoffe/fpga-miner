@@ -35,9 +35,13 @@ parameter KRNL_ISR_REG_ADDR      = 32'h0000000c;
 parameter ISR_DONE_MASK          = 32'h00000001;
 parameter ISR_READY_MASK         = 32'h00000002;
 
+parameter integer  LP_INST_NUM             = 4;  
+
 parameter integer  LP_TARGET_BYTES         = 32;
 parameter integer  LP_NONCE_BYTES          = 24;
 parameter integer  LP_HEADERBLOB_BYTES     = 264;
+
+parameter integer  LP_ALL_NONCE_BYTES      = (LP_NONCE_BYTES*LP_INST_NUM);
 
 parameter integer LP_CLK_PERIOD_PS = 4000; // 250 MHz
 
@@ -89,8 +93,10 @@ wire [1-1:0] s_axi_control_bready;
 wire [2-1:0] s_axi_control_bresp;
 wire interrupt;
 
-  logic [5:0][31:0] nonce;  
+  logic [23:0][31:0] nonce;  
   logic [7:0][31:0] target;
+  logic [7:0] data_byte;
+  logic [31:0] data;
 
 // DUT instantiation
 AlephMiner #(
@@ -207,7 +213,11 @@ bit [63:0] HeaderBlobIn_ptr = 64'h0;
 
 ///////////////////////////////////////////////////////////////////////////
 // Pointer for interface : m00_axi
-bit [63:0] Nonce_ptr = 64'h0;
+bit [63:0] NonceIn_ptr = 64'h0;
+
+///////////////////////////////////////////////////////////////////////////
+// Pointer for interface : m00_axi
+bit [63:0] NonceOut_ptr = 64'h0;
 
 ///////////////////////////////////////////////////////////////////////////
 // Pointer for interface : m00_axi
@@ -565,33 +575,43 @@ task automatic check_pointer_registers(output bit error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: Nonce (0x058)
+  //Write ID 8: NonceIn (0x058)
   check_register_value(32'h058, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: Nonce (0x05c)
+  //Write ID 8: NonceIn (0x05c)
   check_register_value(32'h05c, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: HashCounterOut (0x064)
+  //Write ID 9: NonceOut (0x064)
   check_register_value(32'h064, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: HashCounterOut (0x068)
+  //Write ID 9: NonceOut (0x068)
   check_register_value(32'h068, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: HashOut (0x070)
+  //Write ID 10: HashCounterOut (0x070)
   check_register_value(32'h070, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: HashOut (0x074)
+  //Write ID 10: HashCounterOut (0x074)
   check_register_value(32'h074, 32, tmp_error_found);
+  error_found |= tmp_error_found;
+
+  ///////////////////////////////////////////////////////////////////////////
+  //Write ID 11: HashOut (0x07c)
+  check_register_value(32'h07c, 32, tmp_error_found);
+  error_found |= tmp_error_found;
+
+  ///////////////////////////////////////////////////////////////////////////
+  //Write ID 11: HashOut (0x080)
+  check_register_value(32'h080, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
 endtask
@@ -601,7 +621,8 @@ task automatic set_memory_pointers();
   //Randomly generate memory pointers.
   TargetIn_ptr = get_random_ptr();
   HeaderBlobIn_ptr = get_random_ptr();
-  Nonce_ptr = get_random_ptr();
+  NonceIn_ptr = get_random_ptr();
+  NonceOut_ptr = get_random_ptr();
   HashCounterOut_ptr = get_random_ptr();
   HashOut_ptr = get_random_ptr();
 
@@ -622,28 +643,36 @@ task automatic set_memory_pointers();
   write_register(32'h050, HeaderBlobIn_ptr[63:32]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: Nonce (0x058) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h058, Nonce_ptr[31:0]);
+  //Write ID 8: NonceIn (0x058) -> Randomized 4k aligned address (Global memory, lower 32 bits)
+  write_register(32'h058, NonceIn_ptr[31:0]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: Nonce (0x05c) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h05c, Nonce_ptr[63:32]);
+  //Write ID 8: NonceIn (0x05c) -> Randomized 4k aligned address (Global memory, upper 32 bits)
+  write_register(32'h05c, NonceIn_ptr[63:32]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: HashCounterOut (0x064) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h064, HashCounterOut_ptr[31:0]);
+  //Write ID 9: NonceOut (0x064) -> Randomized 4k aligned address (Global memory, lower 32 bits)
+  write_register(32'h064, NonceOut_ptr[31:0]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: HashCounterOut (0x068) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h068, HashCounterOut_ptr[63:32]);
+  //Write ID 9: NonceOut (0x068) -> Randomized 4k aligned address (Global memory, upper 32 bits)
+  write_register(32'h068, NonceOut_ptr[63:32]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: HashOut (0x070) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h070, HashOut_ptr[31:0]);
+  //Write ID 10: HashCounterOut (0x070) -> Randomized 4k aligned address (Global memory, lower 32 bits)
+  write_register(32'h070, HashCounterOut_ptr[31:0]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: HashOut (0x074) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h074, HashOut_ptr[63:32]);
+  //Write ID 10: HashCounterOut (0x074) -> Randomized 4k aligned address (Global memory, upper 32 bits)
+  write_register(32'h074, HashCounterOut_ptr[63:32]);
+
+  ///////////////////////////////////////////////////////////////////////////
+  //Write ID 11: HashOut (0x07c) -> Randomized 4k aligned address (Global memory, lower 32 bits)
+  write_register(32'h07c, HashOut_ptr[31:0]);
+
+  ///////////////////////////////////////////////////////////////////////////
+  //Write ID 11: HashOut (0x080) -> Randomized 4k aligned address (Global memory, upper 32 bits)
+  write_register(32'h080, HashOut_ptr[63:32]);
 
 endtask
 
@@ -658,22 +687,55 @@ task automatic backdoor_fill_memories();
   target[6] = 32'h6;
   target[7] = 32'hf0010000;
 
-  nonce[0] = 32'h14151617;
+  nonce[0] = 32'h14153617;
   nonce[1] = 32'h10111213;
   nonce[2] = 32'h0C0D0E0F;
   nonce[3] = 32'h08090A0B;
   nonce[4] = 32'h04050607;
   nonce[5] = 32'h00010203;
 
+  nonce[6] = 32'h14152617;
+  nonce[7] = 32'h10111213;
+  nonce[8] = 32'h0C0D0E0F;
+  nonce[9] = 32'h08090A0B;
+  nonce[10] = 32'h04050607;
+  nonce[11] = 32'h00010203;
+
+  nonce[12] = 32'h14151617;
+  nonce[13] = 32'h10111213;
+  nonce[14] = 32'h0C0D0E0F;
+  nonce[15] = 32'h08090A0B;
+  nonce[16] = 32'h04050607;
+  nonce[17] = 32'h00010203;
+
+  nonce[18] = 32'h14154617;
+  nonce[19] = 32'h10111213;
+  nonce[20] = 32'h0C0D0E0F;
+  nonce[21] = 32'h08090A0B;
+  nonce[22] = 32'h04050607;
+  nonce[23] = 32'h00010203;
+
   /////////////////////////////////////////////////////////////////////////////////////////////////
   // Backdoor fill the memory with the content.
   for (longint unsigned slot = 0; slot < LP_TARGET_BYTES/4; slot++) begin
     m00_axi.mem_model.backdoor_memory_write_4byte(TargetIn_ptr + (slot * 4), target[slot]);
   end
-  for (longint unsigned slot = 0; slot < LP_NONCE_BYTES/4; slot++) begin
-    m00_axi.mem_model.backdoor_memory_write_4byte(Nonce_ptr + (slot * 4), nonce[slot]);
+  for (longint unsigned slot = 0; slot < LP_ALL_NONCE_BYTES/4; slot++) begin
+    m00_axi.mem_model.backdoor_memory_write_4byte(NonceIn_ptr + (slot * 4), nonce[slot]);
   end
-  m00_axi_fill_memory(HeaderBlobIn_ptr, LP_HEADERBLOB_BYTES/4);
+  
+  data_byte = 8'h18;
+  for (longint unsigned slot = 0; slot < LP_HEADERBLOB_BYTES/4; slot++) begin
+    data[7:0] =    data_byte;
+    data[15:8] =  (data_byte < 250) ? data_byte + 1 : 0;
+    data[23:16] = (data_byte < 249) ? data_byte + 2 : data_byte%249;
+    data[31:24] = (data_byte < 248) ? data_byte + 3 : data_byte%248;
+    m00_axi.mem_model.backdoor_memory_write_4byte(HeaderBlobIn_ptr + (slot * 4), data);
+    if(data_byte < 247)
+      data_byte = data_byte + 4;
+    else
+      data_byte = data_byte%247;
+   end
 
 endtask
 
@@ -706,7 +768,7 @@ function automatic bit check_kernel_result();
     end
   end
   for (longint unsigned slot = 0; slot < 6; slot++) begin
-    ret_rd_value = m00_axi.mem_model.backdoor_memory_read_4byte(Nonce_ptr + (slot * 4));
+    ret_rd_value = m00_axi.mem_model.backdoor_memory_read_4byte(NonceOut_ptr + (slot * 4));
     $display("Nonce %d 0x%x", slot, ret_rd_value);
   end
   ret_rd_value = m00_axi.mem_model.backdoor_memory_read_4byte(HashCounterOut_ptr);

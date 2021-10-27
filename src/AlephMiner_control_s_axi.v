@@ -5,7 +5,7 @@
 `timescale 1ns/1ps
 module AlephMiner_control_s_axi
 #(parameter
-    C_S_AXI_ADDR_WIDTH = 7,
+    C_S_AXI_ADDR_WIDTH = 8,
     C_S_AXI_DATA_WIDTH = 32
 )(
     input  wire                          ACLK,
@@ -37,7 +37,8 @@ module AlephMiner_control_s_axi
     output wire [15:0]                   ChunkLength,
     output wire [63:0]                   TargetIn,
     output wire [63:0]                   HeaderBlobIn,
-    output wire [63:0]                   Nonce,
+    output wire [63:0]                   NonceIn,
+    output wire [63:0]                   NonceOut,
     output wire [63:0]                   HashCounterOut,
     output wire [63:0]                   HashOut,
     output wire                          ap_start,
@@ -98,56 +99,64 @@ module AlephMiner_control_s_axi
 // 0x50 : Data signal of HeaderBlobIn
 //        bit 31~0 - HeaderBlobIn[63:32] (Read/Write)
 // 0x54 : reserved
-// 0x58 : Data signal of Nonce
-//        bit 31~0 - Nonce[31:0] (Read/Write)
-// 0x5c : Data signal of Nonce
-//        bit 31~0 - Nonce[63:32] (Read/Write)
+// 0x58 : Data signal of NonceIn
+//        bit 31~0 - NonceIn[31:0] (Read/Write)
+// 0x5c : Data signal of NonceIn
+//        bit 31~0 - NonceIn[63:32] (Read/Write)
 // 0x60 : reserved
-// 0x64 : Data signal of HashCounterOut
-//        bit 31~0 - HashCounterOut[31:0] (Read/Write)
-// 0x68 : Data signal of HashCounterOut
-//        bit 31~0 - HashCounterOut[63:32] (Read/Write)
+// 0x64 : Data signal of NonceOut
+//        bit 31~0 - NonceOut[31:0] (Read/Write)
+// 0x68 : Data signal of NonceOut
+//        bit 31~0 - NonceOut[63:32] (Read/Write)
 // 0x6c : reserved
-// 0x70 : Data signal of HashOut
-//        bit 31~0 - HashOut[31:0] (Read/Write)
-// 0x74 : Data signal of HashOut
-//        bit 31~0 - HashOut[63:32] (Read/Write)
+// 0x70 : Data signal of HashCounterOut
+//        bit 31~0 - HashCounterOut[31:0] (Read/Write)
+// 0x74 : Data signal of HashCounterOut
+//        bit 31~0 - HashCounterOut[63:32] (Read/Write)
 // 0x78 : reserved
+// 0x7c : Data signal of HashOut
+//        bit 31~0 - HashOut[31:0] (Read/Write)
+// 0x80 : Data signal of HashOut
+//        bit 31~0 - HashOut[63:32] (Read/Write)
+// 0x84 : reserved
 // (SC = Self Clear, COR = Clear on Read, TOW = Toggle on Write, COH = Clear on Handshake)
 
 //------------------------Parameter----------------------
 localparam
-    ADDR_AP_CTRL               = 7'h00,
-    ADDR_GIE                   = 7'h04,
-    ADDR_IER                   = 7'h08,
-    ADDR_ISR                   = 7'h0c,
-    ADDR_FROMGROUP_DATA_0      = 7'h10,
-    ADDR_FROMGROUP_CTRL        = 7'h14,
-    ADDR_TOGROUP_DATA_0        = 7'h18,
-    ADDR_TOGROUP_CTRL          = 7'h1c,
-    ADDR_GROUPS_DATA_0         = 7'h20,
-    ADDR_GROUPS_CTRL           = 7'h24,
-    ADDR_GROUPSSHIFTER_DATA_0  = 7'h28,
-    ADDR_GROUPSSHIFTER_CTRL    = 7'h2c,
-    ADDR_CHAINNUM_DATA_0       = 7'h30,
-    ADDR_CHAINNUM_CTRL         = 7'h34,
-    ADDR_CHUNKLENGTH_DATA_0    = 7'h38,
-    ADDR_CHUNKLENGTH_CTRL      = 7'h3c,
-    ADDR_TARGETIN_DATA_0       = 7'h40,
-    ADDR_TARGETIN_DATA_1       = 7'h44,
-    ADDR_TARGETIN_CTRL         = 7'h48,
-    ADDR_HEADERBLOBIN_DATA_0   = 7'h4c,
-    ADDR_HEADERBLOBIN_DATA_1   = 7'h50,
-    ADDR_HEADERBLOBIN_CTRL     = 7'h54,
-    ADDR_NONCE_DATA_0          = 7'h58,
-    ADDR_NONCE_DATA_1          = 7'h5c,
-    ADDR_NONCE_CTRL            = 7'h60,
-    ADDR_HASHCOUNTEROUT_DATA_0 = 7'h64,
-    ADDR_HASHCOUNTEROUT_DATA_1 = 7'h68,
-    ADDR_HASHCOUNTEROUT_CTRL   = 7'h6c,
-    ADDR_HASHOUT_DATA_0        = 7'h70,
-    ADDR_HASHOUT_DATA_1        = 7'h74,
-    ADDR_HASHOUT_CTRL          = 7'h78,
+    ADDR_AP_CTRL               = 8'h00,
+    ADDR_GIE                   = 8'h04,
+    ADDR_IER                   = 8'h08,
+    ADDR_ISR                   = 8'h0c,
+    ADDR_FROMGROUP_DATA_0      = 8'h10,
+    ADDR_FROMGROUP_CTRL        = 8'h14,
+    ADDR_TOGROUP_DATA_0        = 8'h18,
+    ADDR_TOGROUP_CTRL          = 8'h1c,
+    ADDR_GROUPS_DATA_0         = 8'h20,
+    ADDR_GROUPS_CTRL           = 8'h24,
+    ADDR_GROUPSSHIFTER_DATA_0  = 8'h28,
+    ADDR_GROUPSSHIFTER_CTRL    = 8'h2c,
+    ADDR_CHAINNUM_DATA_0       = 8'h30,
+    ADDR_CHAINNUM_CTRL         = 8'h34,
+    ADDR_CHUNKLENGTH_DATA_0    = 8'h38,
+    ADDR_CHUNKLENGTH_CTRL      = 8'h3c,
+    ADDR_TARGETIN_DATA_0       = 8'h40,
+    ADDR_TARGETIN_DATA_1       = 8'h44,
+    ADDR_TARGETIN_CTRL         = 8'h48,
+    ADDR_HEADERBLOBIN_DATA_0   = 8'h4c,
+    ADDR_HEADERBLOBIN_DATA_1   = 8'h50,
+    ADDR_HEADERBLOBIN_CTRL     = 8'h54,
+    ADDR_NONCEIN_DATA_0        = 8'h58,
+    ADDR_NONCEIN_DATA_1        = 8'h5c,
+    ADDR_NONCEIN_CTRL          = 8'h60,
+    ADDR_NONCEOUT_DATA_0       = 8'h64,
+    ADDR_NONCEOUT_DATA_1       = 8'h68,
+    ADDR_NONCEOUT_CTRL         = 8'h6c,
+    ADDR_HASHCOUNTEROUT_DATA_0 = 8'h70,
+    ADDR_HASHCOUNTEROUT_DATA_1 = 8'h74,
+    ADDR_HASHCOUNTEROUT_CTRL   = 8'h78,
+    ADDR_HASHOUT_DATA_0        = 8'h7c,
+    ADDR_HASHOUT_DATA_1        = 8'h80,
+    ADDR_HASHOUT_CTRL          = 8'h84,
     WRIDLE                     = 2'd0,
     WRDATA                     = 2'd1,
     WRRESP                     = 2'd2,
@@ -155,7 +164,7 @@ localparam
     RDIDLE                     = 2'd0,
     RDDATA                     = 2'd1,
     RDRESET                    = 2'd2,
-    ADDR_BITS                = 7;
+    ADDR_BITS                = 8;
 
 //------------------------Local signal-------------------
     reg  [1:0]                    wstate = WRRESET;
@@ -191,7 +200,8 @@ localparam
     reg  [15:0]                   int_ChunkLength = 'b0;
     reg  [63:0]                   int_TargetIn = 'b0;
     reg  [63:0]                   int_HeaderBlobIn = 'b0;
-    reg  [63:0]                   int_Nonce = 'b0;
+    reg  [63:0]                   int_NonceIn = 'b0;
+    reg  [63:0]                   int_NonceOut = 'b0;
     reg  [63:0]                   int_HashCounterOut = 'b0;
     reg  [63:0]                   int_HashOut = 'b0;
 
@@ -332,11 +342,17 @@ always @(posedge ACLK) begin
                 ADDR_HEADERBLOBIN_DATA_1: begin
                     rdata <= int_HeaderBlobIn[63:32];
                 end
-                ADDR_NONCE_DATA_0: begin
-                    rdata <= int_Nonce[31:0];
+                ADDR_NONCEIN_DATA_0: begin
+                    rdata <= int_NonceIn[31:0];
                 end
-                ADDR_NONCE_DATA_1: begin
-                    rdata <= int_Nonce[63:32];
+                ADDR_NONCEIN_DATA_1: begin
+                    rdata <= int_NonceIn[63:32];
+                end
+                ADDR_NONCEOUT_DATA_0: begin
+                    rdata <= int_NonceOut[31:0];
+                end
+                ADDR_NONCEOUT_DATA_1: begin
+                    rdata <= int_NonceOut[63:32];
                 end
                 ADDR_HASHCOUNTEROUT_DATA_0: begin
                     rdata <= int_HashCounterOut[31:0];
@@ -370,7 +386,8 @@ assign ChainNum          = int_ChainNum;
 assign ChunkLength       = int_ChunkLength;
 assign TargetIn          = int_TargetIn;
 assign HeaderBlobIn      = int_HeaderBlobIn;
-assign Nonce             = int_Nonce;
+assign NonceIn           = int_NonceIn;
+assign NonceOut          = int_NonceOut;
 assign HashCounterOut    = int_HashCounterOut;
 assign HashOut           = int_HashOut;
 // int_ap_start
@@ -593,23 +610,43 @@ always @(posedge ACLK) begin
     end
 end
 
-// int_Nonce[31:0]
+// int_NonceIn[31:0]
 always @(posedge ACLK) begin
     if (ARESET)
-        int_Nonce[31:0] <= 0;
+        int_NonceIn[31:0] <= 0;
     else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_NONCE_DATA_0)
-            int_Nonce[31:0] <= (WDATA[31:0] & wmask) | (int_Nonce[31:0] & ~wmask);
+        if (w_hs && waddr == ADDR_NONCEIN_DATA_0)
+            int_NonceIn[31:0] <= (WDATA[31:0] & wmask) | (int_NonceIn[31:0] & ~wmask);
     end
 end
 
-// int_Nonce[63:32]
+// int_NonceIn[63:32]
 always @(posedge ACLK) begin
     if (ARESET)
-        int_Nonce[63:32] <= 0;
+        int_NonceIn[63:32] <= 0;
     else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_NONCE_DATA_1)
-            int_Nonce[63:32] <= (WDATA[31:0] & wmask) | (int_Nonce[63:32] & ~wmask);
+        if (w_hs && waddr == ADDR_NONCEIN_DATA_1)
+            int_NonceIn[63:32] <= (WDATA[31:0] & wmask) | (int_NonceIn[63:32] & ~wmask);
+    end
+end
+
+// int_NonceOut[31:0]
+always @(posedge ACLK) begin
+    if (ARESET)
+        int_NonceOut[31:0] <= 0;
+    else if (ACLK_EN) begin
+        if (w_hs && waddr == ADDR_NONCEOUT_DATA_0)
+            int_NonceOut[31:0] <= (WDATA[31:0] & wmask) | (int_NonceOut[31:0] & ~wmask);
+    end
+end
+
+// int_NonceOut[63:32]
+always @(posedge ACLK) begin
+    if (ARESET)
+        int_NonceOut[63:32] <= 0;
+    else if (ACLK_EN) begin
+        if (w_hs && waddr == ADDR_NONCEOUT_DATA_1)
+            int_NonceOut[63:32] <= (WDATA[31:0] & wmask) | (int_NonceOut[63:32] & ~wmask);
     end
 end
 

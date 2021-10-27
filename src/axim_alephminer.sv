@@ -2,7 +2,8 @@
 
 module axim_alephminer 
 	#(C_M00_AXI_ADDR_WIDTH = 64, 
-    C_M00_AXI_DATA_WIDTH = 32)
+    C_M00_AXI_DATA_WIDTH = 32,
+    INST_NUM = 4)
   (
   // System Signals
   input                                ap_clk         ,
@@ -40,14 +41,15 @@ module axim_alephminer
   input   [15:0]                       ChunkLength    ,
   input   [63:0]                       TargetIn       ,
   input   [63:0]                       HeaderBlobIn   ,
-  input   [63:0]                       Nonce          ,
+  input   [63:0]                       NonceIn        ,
+  input   [63:0]                       NonceOut       ,
   input   [63:0]                       HashCounterOut ,
   input   [63:0]                       HashOut        
 );
 
   // states for the FSM
   typedef enum {RD_IDLE, TARGET_ST, NONCE_ST, HEADERBLOB_ST} state_t;
-  typedef enum {WR_IDLE, WR_NONCE, HASHCNTR_ST, HASH_ST} wr_state_t;
+  typedef enum {WR_IDLE, WR_NONCE, HASHCNTR_ST, HASH_ST, DONE_ST} wr_state_t;
   
   ///////////////////////////////////////////////////////////////////////////////
   // Local Parameters
@@ -66,6 +68,9 @@ module axim_alephminer
   localparam integer  LP_TARGET_NUM           = LP_TARGET_BYTES>>2;
   localparam integer  LP_NONCE_NUM            = LP_NONCE_BYTES>>2;
   localparam integer  LP_HEADERBLOB_NUM       = LP_HEADERBLOB_BYTES>>2;
+
+  localparam integer  LP_ALL_NONCE_BYTES      = LP_NONCE_BYTES*INST_NUM;
+  localparam integer  LP_ALL_NONCE_NUM        = LP_ALL_NONCE_BYTES>>2;
 
   ///////////////////////////////////////////////////////////////////////////////
   // Wires and Variables
@@ -100,16 +105,22 @@ module axim_alephminer
   // AleMiner
   logic update_miner;
   logic [(LP_TARGET_BYTES>>2)-1:0][31:0] target;
-  logic [(LP_NONCE_BYTES>>2)-1:0][31:0] nonce;
+  logic [(LP_NONCE_NUM*INST_NUM)-1:0][31:0] nonce;
 
   logic [31:0] headerblob;
   logic wr;
 
-  logic miner_rdy;
-  logic [LP_NONCE_NUM-1:0][31:0] vld_nonce;
-  logic [7:0][31:0] hash;
+  logic [INST_NUM-1:0] miner_rdy;
+  logic miner_rdy_reg = 1'b0;
+  logic [INST_NUM-1:0][LP_NONCE_NUM-1:0][31:0] vld_nonce;
+  logic [INST_NUM-1:0][LP_TARGET_NUM-1:0][31:0] hash;
+
+  logic [LP_NONCE_NUM-1:0][31:0] winner_nonce = 0;
+  logic [LP_TARGET_NUM-1:0][31:0] winner_hash = 0;
   
-  logic [31:0] hash_cntr;
+  logic [INST_NUM-1:0][31:0] hash_cntr;
+  //accumulated hash counter
+  logic [31:0] acc_hash_cntr = 0;
 
   // FSM write
   wr_state_t next_wr_state;
@@ -206,7 +217,7 @@ module axim_alephminer
       NONCE_ST: begin
         if(ap_start_pulse)
           next_state <= TARGET_ST;
-        else if(idx==LP_NONCE_NUM)
+        else if(idx==LP_ALL_NONCE_NUM)
           next_state <= HEADERBLOB_ST;
       end//NONCE_ST
       
@@ -258,8 +269,8 @@ module axim_alephminer
           if(idx==LP_TARGET_NUM) begin
             idx <= 0;
             read_start <= 1'b1;
-            ctrl_addr_offset <= Nonce;
-            ctrl_xfer_size_in_bytes <= LP_NONCE_BYTES;
+            ctrl_addr_offset <= NonceIn;
+            ctrl_xfer_size_in_bytes <= LP_ALL_NONCE_BYTES;
           end
         end//TARGET_ST
 
@@ -268,7 +279,7 @@ module axim_alephminer
             nonce[idx] <= rd_data;
             idx <= idx + 1;
           end 
-          if(idx==LP_NONCE_NUM) begin
+          if(idx==LP_ALL_NONCE_NUM) begin
             update_miner <= 1'b1;
             read_start <= 1'b1;
             idx <= 0;
@@ -334,25 +345,31 @@ module axim_alephminer
   assign groups_w =  {{8{1'b0}},Groups,ChainNum,GroupsShifter};
   assign chunk_length = {{15{1'b0}},ChunkLength};
 
+  generate //start of generate block
+    genvar i;
 
-  AleMiner AleMiner_i
-  (
-    .Clk(ap_clk),
-    .Rst_n(areset_n),
-    .UpdateTrigger_I(update_miner),
-    .GroupDirections_I(group_directions),
-    .Groups_I(groups_w),
-    .ChunkLength_I(chunk_length),
-    .Target_I(target),
-    .Nonce_I(nonce),
-    .Wr_I(wr),
-    .Data_I(headerblob),
-    .VldNonce_O(miner_rdy),
-    .Nonce_O(vld_nonce),
-    .HashCounter_O(hash_cntr),
-    .Hash_O(hash),
-    .Irq_O() 
-  );
+    for (i=0; i<INST_NUM; i++) begin
+      AleMiner AleMiner_i
+      (
+        .Clk(ap_clk),
+        .Rst_n(areset_n),
+        .UpdateTrigger_I(update_miner),
+        .GroupDirections_I(group_directions),
+        .Groups_I(groups_w),
+        .ChunkLength_I(chunk_length),
+        .Target_I(target),
+        .Nonce_I(nonce[(LP_NONCE_NUM*(i+1)-1):LP_NONCE_NUM*i]),
+        .Wr_I(wr),
+        .Data_I(headerblob),
+        .VldNonce_O(miner_rdy[i]),
+        .Nonce_O(vld_nonce[i]),
+        .HashCounter_O(hash_cntr[i]),
+        .Hash_O(hash[i]),
+        .Irq_O() 
+      );
+    end
+
+  endgenerate
 
   ///////////////
   // WRITE FSM //
@@ -374,7 +391,7 @@ module axim_alephminer
     case (wr_state)
     
       WR_IDLE: begin
-        if(miner_rdy && !ap_start_pulse)
+        if(miner_rdy_reg && !ap_start_pulse)
           next_wr_state <= WR_NONCE;
       end//WR_IDLE
       
@@ -393,9 +410,16 @@ module axim_alephminer
       end//HASHCNTR_ST
       
       HASH_ST: begin
-        if(ap_start_pulse || wr_bvld)
+        if(ap_start_pulse)
           next_wr_state <= WR_IDLE;
+        else if(wr_bvld)
+          next_wr_state <= DONE_ST;
       end//HASH_ST
+      
+      DONE_ST: begin
+        if(update_miner)
+          next_wr_state <= WR_IDLE;
+       end//DONE_ST
 
       default:
           next_wr_state <= wr_state;
@@ -423,11 +447,11 @@ module axim_alephminer
           write_addr_offset <= 0;
           write_xfer_size_in_bytes <= 0;
           wr_data <= 0;
-          if(miner_rdy) begin
+          if(miner_rdy_reg) begin
             write_start <= 1'b1;
-            write_addr_offset <= Nonce;
+            write_addr_offset <= NonceOut;
             write_xfer_size_in_bytes <= LP_NONCE_BYTES;
-            wr_data <= vld_nonce[0];
+            wr_data <= winner_nonce[0];
             wr_idx <= 1;
           end
         end//IDLE
@@ -438,7 +462,7 @@ module axim_alephminer
           else
             wr_vld <= 1'b0;
           if(wr_rdy && wr_vld) begin
-            wr_data <= nonce[wr_idx];
+            wr_data <= winner_nonce[wr_idx];
             wr_idx <= wr_idx + 1;
           end
           if(wr_bvld) begin
@@ -446,7 +470,7 @@ module axim_alephminer
             write_start <= 1'b1;
             write_addr_offset <= HashCounterOut;
             write_xfer_size_in_bytes <= 4;
-            wr_data <= hash_cntr;
+            wr_data <= acc_hash_cntr;
           end
         end//NONCE_ST
 
@@ -462,7 +486,7 @@ module axim_alephminer
             write_start <= 1'b1;
             write_addr_offset <= HashOut;
             write_xfer_size_in_bytes <= LP_TARGET_BYTES;
-            wr_data <= hash[0];
+            wr_data <= winner_hash[0];
           end
         end//HASHCNTR_ST
         
@@ -472,7 +496,7 @@ module axim_alephminer
           else
             wr_vld <= 1'b0;
           if(wr_rdy && wr_vld) begin
-            wr_data <= hash[wr_idx];
+            wr_data <= winner_hash[wr_idx];
             wr_idx <= wr_idx + 1;
           end
         end//HASH_ST
@@ -490,7 +514,51 @@ module axim_alephminer
     end
   end
   
-  assign full_wr_done = (wr_state==WR_IDLE) ? write_done : 1'b0;
+  assign full_wr_done = (wr_state==DONE_ST) ? write_done : 1'b0;
+
+  /////////////////////////////////////////////
+  // WINNER NONCE & HASHCOUNTER ACCUMULATION //
+  /////////////////////////////////////////////
+  
+  always_ff@(posedge ap_clk or negedge ap_rst_n)
+  begin : miner_ready_reg
+    if(~ap_rst_n)
+      miner_rdy_reg <= 1'b0;
+    // one of the miners found a valid value
+    else
+      miner_rdy_reg <= (|miner_rdy);
+  end
+
+  always_ff@(posedge ap_clk or negedge ap_rst_n)
+  begin : winner_nonce_mux
+    if(~ap_rst_n) begin
+      winner_nonce <= 0;
+    end
+    // one of the miners found a valid value
+    else if(|miner_rdy && wr_state==WR_IDLE) begin
+      for(int i = 0; i < INST_NUM; i++) begin
+        if (miner_rdy == (1 << i)) begin
+          winner_nonce = vld_nonce[i];
+          winner_hash = hash[i];
+        end
+      end
+    end
+  end
+
+  always_ff@(posedge ap_clk or negedge ap_rst_n)
+  begin : hash_counter_acc
+    if(~ap_rst_n)
+      acc_hash_cntr <= 0;
+    else if(update_miner) 
+        acc_hash_cntr <= 0;
+    // one of the miners found a valid value
+    else if(|miner_rdy && wr_state==WR_IDLE) begin
+      for(int i = 0; i < INST_NUM; i++) begin
+          acc_hash_cntr += hash_cntr[i];
+      end
+    end
+  end
+  
 
 
   // AXI4 Write Master

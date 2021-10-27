@@ -99,7 +99,8 @@ wire [8-1:0]                        ChainNum                      ;
 wire [16-1:0]                       ChunkLength                   ;
 wire [64-1:0]                       TargetIn                      ;
 wire [64-1:0]                       HeaderBlobIn                  ;
-wire [64-1:0]                       Nonce                         ;
+wire [64-1:0]                       NonceIn                       ;
+wire [64-1:0]                       NonceOut                      ;
 wire [64-1:0]                       HashCounterOut                ;
 wire [64-1:0]                       HashOut                       ;
 
@@ -147,21 +148,22 @@ inst_control_s_axi (
   .ChunkLength    ( ChunkLength           ),
   .TargetIn       ( TargetIn              ),
   .HeaderBlobIn   ( HeaderBlobIn          ),
-  .Nonce          ( Nonce                 ),
+  .NonceIn        ( NonceIn               ),
+  .NonceOut       ( NonceOut              ),
   .HashCounterOut ( HashCounterOut        ),
   .HashOut        ( HashOut               )
 );
 
 ///////////////////////////////////////////////////////////////////////////////
-// Add kernel logic here.  Modify/remove example code as necessary.
+// AXIM ALEPHMINER
 ///////////////////////////////////////////////////////////////////////////////
 
-// Example RTL block.  Remove to insert custom logic.
+
 axim_alephminer #(
   .C_M00_AXI_ADDR_WIDTH ( C_M00_AXI_ADDR_WIDTH ),
   .C_M00_AXI_DATA_WIDTH ( C_M00_AXI_DATA_WIDTH )
 )
-axim_alephminer_i (
+ axim_alephminer_i(
   .ap_clk          ( ap_clk          ),
   .ap_rst_n        ( 1'b1            ),
   .m00_axi_awvalid ( m00_axi_awvalid ),
@@ -195,7 +197,8 @@ axim_alephminer_i (
   .ChunkLength     ( ChunkLength     ),
   .TargetIn        ( TargetIn        ),
   .HeaderBlobIn    ( HeaderBlobIn    ),
-  .Nonce           ( Nonce           ),
+  .NonceIn         ( NonceIn         ),
+  .NonceOut        ( NonceOut        ),
   .HashCounterOut  ( HashCounterOut  ),
   .HashOut         ( HashOut         )
 );
