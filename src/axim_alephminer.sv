@@ -3,7 +3,7 @@
 module axim_alephminer 
 	#(C_M00_AXI_ADDR_WIDTH = 64, 
     C_M00_AXI_DATA_WIDTH = 32,
-    INST_NUM = 4)
+    INST_NUM = 2)
   (
   // System Signals
   input                                ap_clk         ,
