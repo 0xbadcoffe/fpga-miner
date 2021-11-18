@@ -676,18 +676,20 @@ task automatic set_memory_pointers();
 
 endtask
 
-task automatic backdoor_fill_memories();
+task automatic backdoor_fill_memories(integer unsigned iter);
 
-  target[0] = 32'h0;
-  target[1] = 32'h1;
-  target[2] = 32'h2;
-  target[3] = 32'h3;
-  target[4] = 32'h4;
-  target[5] = 32'h5;
-  target[6] = 32'h6;
-  target[7] = 32'hf0010000;
+  target[0] = 32'hffffffff;
+  target[1] = 32'hffffffff;
+  target[2] = 32'hffffffff;
+  target[3] = 32'hffffffff;
+  target[4] = 32'hffffffff;
+  target[5] = 32'hffffffff;
+  target[6] = 32'hffffffff;
+  target[7] = 32'h000fffff;
+  if(iter==1)
+    target[7] = 32'hffffffff;
 
-  nonce[0] = 32'h14153617;
+  nonce[0] = 32'h14151617;
   nonce[1] = 32'h10111213;
   nonce[2] = 32'h0C0D0E0F;
   nonce[3] = 32'h08090A0B;
@@ -701,7 +703,7 @@ task automatic backdoor_fill_memories();
   nonce[10] = 32'h04050607;
   nonce[11] = 32'h00010203;
 
-  nonce[12] = 32'h14151617;
+  nonce[12] = 32'h14153617;
   nonce[13] = 32'h10111213;
   nonce[14] = 32'h0C0D0E0F;
   nonce[15] = 32'h08090A0B;
@@ -816,7 +818,7 @@ task automatic multiple_iteration(input integer unsigned num_iterations, output 
 
     write_scalar_registers();
     set_memory_pointers();
-    backdoor_fill_memories();
+    backdoor_fill_memories(iter);
     // Check that Kernel is IDLE before starting.
     poll_idle_register();
     ///////////////////////////////////////////////////////////////////////////

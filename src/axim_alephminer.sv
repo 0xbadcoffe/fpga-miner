@@ -3,8 +3,9 @@
 module axim_alephminer 
 	#(C_M00_AXI_ADDR_WIDTH = 64, 
     C_M00_AXI_DATA_WIDTH = 32,
-    INST_NUM = 2)
-
+    INST_NUM = 2,
+    MINING_STEPS = 1000000
+    )
   (
   // System Signals
   input                                ap_clk         ,
@@ -110,6 +111,9 @@ module axim_alephminer
   logic wr;
 
   logic [INST_NUM-1:0] miner_rdy;
+  logic invld_hash;
+  logic invld_hash_reg;
+  logic invld_hash_pulse;
   logic miner_rdy_reg = 1'b0;
   logic [INST_NUM-1:0][LP_NONCE_NUM-1:0][31:0] vld_nonce;
   logic [INST_NUM-1:0][LP_TARGET_NUM-1:0][31:0] hash;
@@ -406,7 +410,7 @@ module axim_alephminer
     case (wr_state)
     
       WR_IDLE: begin
-        if(miner_rdy_reg && !ap_start_pulse)
+        if((invld_hash_pulse ||  miner_rdy_reg) && !ap_start_pulse)
           next_wr_state <= WR_NONCE;
       end//WR_IDLE
       
@@ -462,7 +466,7 @@ module axim_alephminer
           write_addr_offset <= 0;
           write_xfer_size_in_bytes <= 0;
           wr_data <= 0;
-          if(miner_rdy_reg) begin
+          if(miner_rdy_reg || invld_hash_pulse) begin
             write_start <= 1'b1;
             write_addr_offset <= NonceOut;
             write_xfer_size_in_bytes <= LP_NONCE_BYTES;
@@ -485,7 +489,7 @@ module axim_alephminer
             write_start <= 1'b1;
             write_addr_offset <= HashCounterOut;
             write_xfer_size_in_bytes <= 4;
-            wr_data <= acc_hash_cntr;
+            wr_data <= {invld_hash_reg,acc_hash_cntr[30:0]};
           end
         end//NONCE_ST
 
@@ -543,6 +547,21 @@ module axim_alephminer
     else
       miner_rdy_reg <= (|miner_rdy);
   end
+  
+  assign invld_hash = (hash_cntr[0]==MINING_STEPS && !miner_rdy_reg);
+  
+  always_ff@(posedge ap_clk or negedge ap_rst_n)
+  begin : invalid_hash_reg
+    if(~ap_rst_n)
+      invld_hash_reg <= 1'b0;
+    // one of the miners found a valid value
+    else if(ap_start_pulse)
+      invld_hash_reg <= 1'b0;
+    else
+      invld_hash_reg <= invld_hash;
+  end
+  
+  assign invld_hash_pulse = (!invld_hash_reg && invld_hash);
 
   always_ff@(posedge ap_clk or negedge ap_rst_n)
   begin : winner_nonce_mux
@@ -567,7 +586,7 @@ module axim_alephminer
     else if(update_miner) 
         acc_hash_cntr <= 0;
     // one of the miners found a valid value
-    else if(|miner_rdy && wr_state==WR_IDLE) begin
+    else if((|miner_rdy || invld_hash_pulse) && wr_state==WR_IDLE)  begin
       for(int i = 0; i < INST_NUM; i++) begin
           acc_hash_cntr += hash_cntr[i];
       end

@@ -171,6 +171,7 @@ module AleMiner
     .Clk(Clk),
     .Rst_n(Rst_n),
     .Update_I(strt),
+    .Clear_I(UpdateTrigger_I),
     .Msg_I(msg),
     .ByteNum_I(ChunkLength_I[10:0]),
     .FromGroup_I(from_group),

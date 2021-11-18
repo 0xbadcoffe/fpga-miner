@@ -9,6 +9,7 @@ module Miner
   // Inputs
   // Memory inputs
   input Update_I,
+  input Clear_I,
   input [31:0] Msg_I,
   // Number of Bytes in the chunk
   // Nonce + headerBlob <= 1024 bytes
@@ -147,14 +148,18 @@ module Miner
       end//IDLE
       
       FIRST_BLOCK: begin
-        if(Update_I)
+        if(Clear_I)
+          next_state <= IDLE;
+        else if(Update_I)
           next_state <= FIRST_BLOCK;
         else if(msg_cntr==9 || ByteNum_I==0)
           next_state <= MIDDLE_BLOCKS;
       end//FIRST_BLOCK
 
       MIDDLE_BLOCKS: begin
-        if(Update_I)
+        if(Clear_I)
+          next_state <= IDLE;
+        else if(Update_I)
           next_state <= FIRST_BLOCK;
         // rising edge of the valid hash
         else if(vld_hash[1:0]==2'b01)
@@ -162,7 +167,9 @@ module Miner
       end//MIDDLE_BLOCKS
       
       DOUBLE_HASH: begin
-        if(Update_I)
+        if(Clear_I)
+          next_state <= IDLE;
+        else if(Update_I)
           next_state <= FIRST_BLOCK;
         // rising edge of the valid hash
         else if(vld_hash[1:0]==2'b01)
