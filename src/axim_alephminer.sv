@@ -4,6 +4,7 @@ module axim_alephminer
 	#(C_M00_AXI_ADDR_WIDTH = 64, 
     C_M00_AXI_DATA_WIDTH = 32,
     INST_NUM = 2)
+
   (
   // System Signals
   input                                ap_clk         ,
@@ -63,11 +64,9 @@ module axim_alephminer
 
   localparam integer  LP_TARGET_BYTES         = 32;
   localparam integer  LP_NONCE_BYTES          = 24;
-  localparam integer  LP_HEADERBLOB_BYTES     = 264;
   
   localparam integer  LP_TARGET_NUM           = LP_TARGET_BYTES>>2;
   localparam integer  LP_NONCE_NUM            = LP_NONCE_BYTES>>2;
-  localparam integer  LP_HEADERBLOB_NUM       = LP_HEADERBLOB_BYTES>>2;
 
   localparam integer  LP_ALL_NONCE_BYTES      = LP_NONCE_BYTES*INST_NUM;
   localparam integer  LP_ALL_NONCE_NUM        = LP_ALL_NONCE_BYTES>>2;
@@ -134,10 +133,26 @@ module axim_alephminer
   logic wr_rdy;
   logic [31:0] wr_data;
   logic wr_bvld;
+  
+  logic [31:0] headerblob_bytes;
+  logic [31:0] headerblob_num;
 
   ///////////////////////////////////////////////////////////////////////////////
   // Begin RTL
   ///////////////////////////////////////////////////////////////////////////////
+  
+  assign headerblob_bytes = ChunkLength - LP_NONCE_BYTES;
+  
+  always@(posedge ap_clk) begin
+     if (~areset_n)
+        headerblob_num <= 0;
+    else if (headerblob_bytes[1:0] != 0)
+        headerblob_num <= (headerblob_bytes>>2) + 1;
+    else
+        headerblob_num <= headerblob_bytes>>2;
+  end
+  
+
 
 
   // Register reset signal.
@@ -224,7 +239,7 @@ module axim_alephminer
       HEADERBLOB_ST: begin
         if(ap_start_pulse)
           next_state <= TARGET_ST;
-        else if(idx==LP_HEADERBLOB_NUM)
+        else if(idx==headerblob_num)
           next_state <= RD_IDLE;
       end//HEADERBLOB_ST
 
@@ -284,7 +299,7 @@ module axim_alephminer
             read_start <= 1'b1;
             idx <= 0;
             ctrl_addr_offset <= HeaderBlobIn;
-            ctrl_xfer_size_in_bytes <= LP_HEADERBLOB_BYTES; 
+            ctrl_xfer_size_in_bytes <= headerblob_bytes; 
           end
         end//NONCE_ST
         

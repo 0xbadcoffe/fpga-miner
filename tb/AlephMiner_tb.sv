@@ -39,7 +39,7 @@ parameter integer  LP_INST_NUM             = 4;
 
 parameter integer  LP_TARGET_BYTES         = 32;
 parameter integer  LP_NONCE_BYTES          = 24;
-parameter integer  LP_HEADERBLOB_BYTES     = 264;
+parameter integer  LP_HEADERBLOB_BYTES     = 304;
 
 parameter integer  LP_ALL_NONCE_BYTES      = (LP_NONCE_BYTES*LP_INST_NUM);
 
@@ -544,7 +544,7 @@ task automatic write_scalar_registers();
 
   ///////////////////////////////////////////////////////////////////////////
   //Write ID 5: ChunkLength (0x038) -> 32'hffffffff (scalar)
-  write_register(32'h038, 32'h00000120);
+  write_register(32'h038, 32'h00000146);
 
 endtask
 
@@ -728,8 +728,13 @@ task automatic backdoor_fill_memories();
   for (longint unsigned slot = 0; slot < LP_HEADERBLOB_BYTES/4; slot++) begin
     data[7:0] =    data_byte;
     data[15:8] =  (data_byte < 250) ? data_byte + 1 : 0;
-    data[23:16] = (data_byte < 249) ? data_byte + 2 : data_byte%249;
-    data[31:24] = (data_byte < 248) ? data_byte + 3 : data_byte%248;
+    if(slot==LP_HEADERBLOB_BYTES/4-1) begin
+        data[31:16] = 0;
+    end
+    else begin
+        data[23:16] = (data_byte < 249) ? data_byte + 2 : data_byte%249;
+        data[31:24] = (data_byte < 248) ? data_byte + 3 : data_byte%248;
+    end
     m00_axi.mem_model.backdoor_memory_write_4byte(HeaderBlobIn_ptr + (slot * 4), data);
     if(data_byte < 247)
       data_byte = data_byte + 4;

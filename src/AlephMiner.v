@@ -8,8 +8,8 @@ module AlephMiner #(
   parameter integer C_S_AXI_CONTROL_ADDR_WIDTH = 12,
   parameter integer C_S_AXI_CONTROL_DATA_WIDTH = 32,
   parameter integer C_M00_AXI_ADDR_WIDTH       = 64,
-  parameter integer C_M00_AXI_DATA_WIDTH       = 32
-)
+  parameter integer C_M00_AXI_DATA_WIDTH       = 32,
+  parameter integer INST_NUM = 2)
 (
   // System Signals
   input  wire                                    ap_clk               ,
@@ -161,7 +161,8 @@ inst_control_s_axi (
 
 axim_alephminer #(
   .C_M00_AXI_ADDR_WIDTH ( C_M00_AXI_ADDR_WIDTH ),
-  .C_M00_AXI_DATA_WIDTH ( C_M00_AXI_DATA_WIDTH )
+  .C_M00_AXI_DATA_WIDTH ( C_M00_AXI_DATA_WIDTH ),
+  .INST_NUM(INST_NUM)
 )
  axim_alephminer_i(
   .ap_clk          ( ap_clk          ),
