@@ -33,41 +33,55 @@ miner_request_t G_MINER_REQS[parallel_mining_works];
 void on_write_end(uv_write_t *req, int status)
 {
 
-	printf("           On write end\n");
+	//printf("           On write end\n");
     if (status < 0) {
         fprintf(stderr, "error on_write_end");
         exit(1);
     }
     free(req);
-    printf("sent new block\n");
+    //sprintf("sent new block\n");
 }
 
-//uint8_t write_buffer[4096 * 1024];
+uint8_t write_buffer[4096 * 1024];
 std::mutex write_mutex;
 void submit_new_block(mining_worker_t *worker)
 {
-
 	assert(load_worker__template(worker) != NULL);
     if (!expire_template_for_new_block(load_worker__template(worker))) {
         printf("mined a parallel block, will not submit\n");
         return;
     }
 
-    ssize_t buf_size = write_new_block(worker);
-    uv_buf_t buf = uv_buf_init((char *)write_buffers[worker->id], buf_size);
+    job_t *job = load_worker__template(worker)->job;
+
+    if (check_hash(worker->hash, &job->target, job->from_group, job->to_group)){
+    	printf("\n TRUE\n");
+    } else if(check_index(worker->hash, job->from_group, job->to_group)) {
+    	printf("Target false\n");
+    } else if(check_target(worker->hash, &job->target)) {
+    	printf("Index false\n");
+    }
+    print_hex("found", worker->hash, 32);
+    print_hex("with nonce", worker->nonce, 24);
+    printf("with hash count: %d\n", worker->hash_count);
+    print_hex("with target", job->target.blob, job->target.len);
+    printf("target length %d\n", job->target.len);
+    printf("with groups: %d %d\n\n", job->from_group, job->to_group);
+
+    const std::lock_guard<std::mutex> lock(write_mutex);
+
+    ssize_t buf_size = write_new_block(worker,write_buffer);
+    uv_buf_t buf = uv_buf_init((char *)write_buffer, buf_size);
     print_hex("new block", (uint8_t *)worker->hash, 32);
 
     uv_write_t *write_req = (uv_write_t *)malloc(sizeof(uv_write_t));
     uint32_t buf_count = 1;
-
-    printf("sending new block\n");
     uv_write(write_req, tcp, &buf, buf_count, on_write_end);
 }
 
 
 void event_cb(cl_event event, cl_int cmd_status, void *id)
 {
-	printf("  kernel finished processing request 0x%x\n", *(int*)id);
 	if (getenv("XCL_EMULATION_MODE") != NULL) {
 		printf("  kernel finished processing request 0x%x\n", *(int*)id);
 	}
@@ -81,11 +95,15 @@ void event_cb(cl_event event, cl_int cmd_status, void *id)
         submit_new_block(worker);
     }
 
+//	for(cl_uint i = 0; i < chain_nums; i++) {
+//		if(mining_templates[i]==NULL) {
+//			printf("NULL TEMPLATE index: %d\n", i);
+//		}
+//	}
     mining_template_t *template_ptr = load_worker__template(worker);
     job_t *job = template_ptr->job;
 
     uint32_t chain_index = job->from_group * group_nums + job->to_group;
-    printf("Chain index: %d\n", chain_index);
     mining_counts[chain_index].fetch_sub(mining_steps);
     mining_counts[chain_index].fetch_add(worker->hash_count);
     total_mining_count.fetch_add(worker->hash_count);
@@ -93,14 +111,12 @@ void event_cb(cl_event event, cl_int cmd_status, void *id)
 
     //mining_counts[chain_index] -= mining_steps;
     //mining_counts[chain_index] += (uint64_t)worker->hash_count;
-    printf("Mining_counts\n");
 
     free_template(template_ptr);
     free_buffers(&G_MINER_REQS[*(int*)id]);
-    printf("Free template\n");
+
     worker->async.data = worker;
-    //assert(worker->async != null);
-    printf("Async send\n");
+    assert(worker->async.data != NULL);
     uv_async_send(&(worker->async));
 
 
@@ -131,17 +147,17 @@ void mine(mining_worker_t *worker)
     time_point_t start = Time::now();
 
     int32_t to_mine_index = next_chain_to_mine();
+    //printf("                               TO MINE INDEX %d\n",to_mine_index);
     if (to_mine_index == -1)
     {
-        printf("waiting for new tasks\n");
+        //printf("waiting for new tasks\n");
         worker->timer.data = worker;
         uv_timer_start(&worker->timer, mine_with_timer, 500, 0);
+    } else {
+    	mining_counts[to_mine_index].fetch_add(mining_steps);
+    	setup_template(worker, load_template(to_mine_index));
+    	start_worker_mining(worker);
     }
-
-    mining_counts[to_mine_index].fetch_add(mining_steps);
-    setup_template(worker, load_template(to_mine_index));
-
-    start_worker_mining(worker);
 
     duration_t elapsed = Time::now() - start;
     // printf("=== mining time: %fs\n", elapsed.count());
@@ -174,7 +190,6 @@ void after_mine(uv_work_t *req, int status)
 
 void start_mining()
 {
-	printf("Start mining\n");
     assert(mining_templates_initialized == true);
 
     start_time = Time::now();
@@ -187,7 +202,7 @@ void start_mining()
 
 void start_mining_if_needed()
 {
-	printf("Start mining if needed\n");
+
     if (!mining_templates_initialized)
     {
         bool all_initialized = true;
@@ -220,6 +235,7 @@ void log_hashrate(uv_timer_t *timer)
     if (current_time > start_time)
     {
         duration_t eplased = current_time - start_time;
+        //printf("total mining count: %.0f MH/s ", total_mining_count.load());
         printf("hashrate: %.0f MH/s ", total_mining_count.load() / eplased.count() / 1000000);
         printf("\n");
     }
@@ -278,7 +294,7 @@ void on_read(uv_stream_t *server, ssize_t nread, const uv_buf_t *buf)
         return;
     }
 
-    printf("message type: %d\n", message->kind);
+    //printf("message type: %d\n", message->kind);
     switch (message->kind)
     {
     case JOBS:

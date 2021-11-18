@@ -91,13 +91,12 @@ void store_req_data(ssize_t worker_id, mining_worker_t *worker)
     mining_req_t *mining_req = (mining_req_t*)req[worker_id].data;
     atomic_store(&(mining_req->worker), worker);
 }
-uint8_t write_buffers[parallel_mining_works][2048 * 1024];
-ssize_t write_new_block(mining_worker_t *worker)
+
+ssize_t write_new_block(mining_worker_t *worker, uint8_t *write_buf)
 {
-    uint32_t worker_id = worker->id;
     job_t *job = load_worker__template(worker)->job;
     uint8_t *nonce = worker->nonce;
-    uint8_t *write_pos = write_buffers[worker_id];
+    uint8_t *write_pos = write_buf;
 
     ssize_t block_size = 24 + job->header_blob.len + job->txs_blob.len;
     ssize_t message_size = 1 + 4 + block_size;

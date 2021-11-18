@@ -3,8 +3,8 @@
 
 #define group_nums 4
 #define chain_nums 16
-#define parallel_mining_works 8
+#define parallel_mining_works 9
 #define mining_steps 100000
-#define BLOB_LENGTH 304
+#define DBG_MODE 0
 
 #endif // ALEPHIUM_CONSTANTS_H

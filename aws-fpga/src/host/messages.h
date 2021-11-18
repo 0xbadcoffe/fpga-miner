@@ -180,7 +180,7 @@ bool extract_bool(uint8_t **bytes)
     case 1:
         return true;
     default:
-        fprintf(stderr, "Invaid bool value");
+        fprintf(stderr, "Invalid bool value");
         exit(1);
     }
 }

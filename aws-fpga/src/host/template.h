@@ -84,7 +84,6 @@ bool expire_template_for_new_block(mining_template_t *temp)
     job_t *job = temp->job;
     ssize_t chain_index = job->from_group * group_nums + job->to_group;
     uint64_t block_task_count = temp->chain_task_count;
-    printf("EXPIRE TEMPLATE\n");
 
     mining_template_t *latest_template = load_template(chain_index);
     if (latest_template!=NULL) {
