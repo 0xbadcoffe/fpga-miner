@@ -3,13 +3,16 @@
 `include "defines.sv"
 
 module ChunkHasher
+  #(parameter HASH_DELAY = 71)
   (
   // Clock & Reset
   input Clk,
   input Rst_n,
+  input Clear_I,
   // Inputs
   // Memory inputs
   input Update_I,
+  input DblUpdate_I,
   input [15:0] [31:0] Msg_I,
   // Number of Bytes in the chunk
   // Max 1024
@@ -21,6 +24,7 @@ module ChunkHasher
   
   //final result
   output [7:0] [31:0] H_O,
+  output [$clog2(HASH_DELAY)-1:0] CNTR_O,
   output Vld_O
  
   );
@@ -75,9 +79,24 @@ module ChunkHasher
   //valid output register
   bit vld_out_reg;
   
-  HashGen HashGen_i(
+  // counter of clock cycles in hashing
+  bit [$clog2(HASH_DELAY)-1:0] cc_cntr;
+  bit end_of_block;
+  bit almost_end_of_block;
+  bit en;
+  bit dbl_hash;
+  bit dbl_hash_pulse;
+  bit end_of_dbl_hash;
+  bit dbl_hash_rdy;
+  
+  
+  HashGen #(
+    .HASH_DELAY(HASH_DELAY)
+    )HashGen_i (
     .Clk(Clk),
     .Strt_I(strt),
+    .Clear_I(Clear_I),
+    .EN_I(en),
     .BL_I(byte_len),
     .CS_flg_I(chunk_start),
     .CE_flg_I(chunk_end),
@@ -85,8 +104,13 @@ module ChunkHasher
     .H_I(chain_val),
     .Msg_I(Msg_I),
     .Vld_O(vld),
+    .CNTR_O(cc_cntr),
     .H_O(hash)
   );
+  
+  assign end_of_block = (cc_cntr==HASH_DELAY);
+  assign almost_end_of_block = (cc_cntr==(HASH_DELAY-1));
+  assign CNTR_O = cc_cntr;
   
 ////////////////////
 // Update register //
@@ -129,23 +153,25 @@ module ChunkHasher
 
   end
   
-  assign Vld_O = vld_out_reg;
+  assign Vld_O = next && last_blk;
   
 /////////////////////////
 // Start hash register //
 /////////////////////////
+
+  assign dbl_hash_pulse = (almost_end_of_block && (~dbl_hash) && (state==LAST_BLOCK));
 
   always_ff@(posedge Clk or negedge Rst_n)
   begin : start_reg
     if(~Rst_n)
       strt  <= 1'b0;
     //new message block is ready or the chunk has been updated
-    else if((vld_shr[2:1]==2'b01 && !last_blk) || Update_I)
+    else if((almost_end_of_block))// && !last_blk) || Update_I || dbl_hash_pulse)
       strt <= 1'b1;
     else
       strt <= 1'b0;
   end
-  
+                                                           
   
 //////////////////
 // Byte counter //
@@ -156,10 +182,10 @@ module ChunkHasher
     if(~Rst_n)
       byte_cntr <= 11'h000;
     // new hash is initiated
-    else if(Update_I)
+    else if(Update_I || dbl_hash || end_of_dbl_hash)
       byte_cntr <= 11'h000;
     // adding 64 byte after every hash
-    else if(vld_shr[1:0] == 2'b01)
+    else if(end_of_block)
       byte_cntr <= byte_cntr + 8'h40;
   end
   
@@ -172,7 +198,7 @@ module ChunkHasher
     if(~Rst_n)
       next <= 0;
     else
-      next <= (vld_shr[2:1] == 2'b01);
+      next <= (almost_end_of_block);
   end
   
   assign Next_O = next;
@@ -185,7 +211,7 @@ module ChunkHasher
     if(~Rst_n)
       hash_reg <= 0;
     //hash output is valid
-    else if(vld_shr[2:1]==2'b01)
+    else
       hash_reg <= hash;
   end
   
@@ -205,24 +231,26 @@ module ChunkHasher
   end
   
   // next state decoder
-  always@(upd, vld_shr[2:1], state, byte_cntr, Byte_num_I, byte_left) 
+  always_comb
   begin : next_state_decode
     next_state <= state;
     case (state)
     
       IDLE: begin
-        if(upd)
+        if(Update_I)
           next_state <= FIRST_BLOCK;
       end//IDLE
       
       FIRST_BLOCK, MIDDLE_BLOCKS: begin
-        if(upd)
+        if(Update_I)
           next_state <= FIRST_BLOCK;
-        else if(vld_shr[2:1]==2'b11) begin
-          if(byte_cntr >= Byte_num_I)
-            next_state <= IDLE;
+        else if(Clear_I)
+          next_state <= IDLE;
+        else if(almost_end_of_block) begin
+          if(byte_left <= 8'h40)
+            next_state <= FIRST_BLOCK;
           // less than 64 bytes
-          else if(byte_left <= 8'h40)
+          else if(byte_left <= 8'h80)
             next_state <= LAST_BLOCK;
           else
             next_state <= MIDDLE_BLOCKS;
@@ -230,10 +258,16 @@ module ChunkHasher
       end//FIRST_BLOCK, MIDDLE_BLOCKS
 
       LAST_BLOCK: begin
-        if(upd)
+        if(Update_I)
           next_state <= FIRST_BLOCK;
-        else if(vld_shr[2:1]==2'b11)
+        else if(Clear_I)
           next_state <= IDLE;
+        else if(almost_end_of_block) begin
+          if(~dbl_hash)
+            next_state <= FIRST_BLOCK;
+          else
+            next_state <= IDLE;
+        end
       end//LAST_BLOCK
 
       default:
@@ -247,55 +281,84 @@ module ChunkHasher
   always_ff@(posedge Clk or negedge Rst_n)
   begin : fsm_seq
     if(~Rst_n) begin
-      chunk_start <= 1'b0;
-      chunk_end <= 1'b0;
-      root <= 1'b0;
       last_blk <= 1'b0;
-      chain_val <= 0;
+      en <= 1'b0;
+      dbl_hash <= 1'b0;
     end  
     else begin
-      chunk_start <= 1'b0;
-      chunk_end <= 1'b0;
-      root <= 1'b0;
       last_blk <= 1'b0;
+      en <= 1'b0;
       case (state)
         
         FIRST_BLOCK: begin
-          chunk_start <= 1'b1;
-          // the chaining values are equal to the initialization values
-          for (i = 0; i < 8; i++)
-            chain_val[i] <= IV[i];
+          en <= 1'b1;
+          dbl_hash <= 1'b0;
           //the chunk is 1 block
           if(byte_left <= 8'h40) begin
-            chunk_end <= 1'b1;
-            root <= 1'b1;
             last_blk <= 1'b1;
           end
         end
 
         MIDDLE_BLOCKS: begin
-          chain_val <= hash_reg;
+          en <= 1'b1;
         end
         
         LAST_BLOCK: begin
-          chunk_start <= 1'b0;
-          chunk_end <= 1'b1;
-          root <= 1'b1;
+          en <= 1'b1;
           last_blk <= 1'b1;
-          chain_val <= hash_reg;
+          if(almost_end_of_block)
+            dbl_hash <= 1'b1;
         end
         
         default: begin
-          chunk_start <= 1'b0;
-          chunk_end <= 1'b0;
-          root <= 1'b0;
+          en <= 1'b0;
           last_blk <= 1'b0;
-          chain_val <= 0;
         end
         
       endcase
     end
   end
   
+  assign end_of_dbl_hash = (last_blk && state==FIRST_BLOCK && end_of_block && !dbl_hash);
+  
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin : flag_regs
+    if(~Rst_n) begin
+      chunk_end <= 1'b0;
+      root <= 1'b0;
+    end
+    //new block or new double hash cycle
+    else if(Update_I || end_of_dbl_hash) begin
+      chunk_end <= 1'b0;
+      root <= 1'b0;
+    end
+    else if(state==LAST_BLOCK) begin
+      chunk_end <= 1'b1;
+      root <= 1'b1;
+    end
+  end
+  
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin : chunk_start_reg
+    if(~Rst_n)
+      chunk_start <= 0;
+    else if(Update_I || dbl_hash)
+      chunk_start <= 1'b1;
+    else if(state!=FIRST_BLOCK)
+      chunk_start <= 0;
+  end
+  
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin : chain_val_regs
+    if(~Rst_n)
+      chain_val <= 0;
+    else if(Update_I || dbl_hash) begin
+      // the chaining values are equal to the initialization values
+      for (i = 0; i < 8; i++)
+        chain_val[i] <= IV[i];
+    end
+    else if(state inside {MIDDLE_BLOCKS,LAST_BLOCK})
+      chain_val <= hash;
+  end
   
 endmodule : ChunkHasher

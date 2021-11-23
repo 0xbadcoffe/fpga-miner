@@ -1,7 +1,8 @@
 // === Miner.sv ===
 
 module Miner
-  #(parameter NONCE_BYTE_LEN = 24)
+  #(parameter NONCE_BYTE_LEN = 24,
+    parameter HASH_DELAY = 71)
   (
   // Clock & Reset
   input Clk,
@@ -10,7 +11,7 @@ module Miner
   // Memory inputs
   input Update_I,
   input Clear_I,
-  input [31:0] Msg_I,
+  input [15:0] [31:0] Msg_I ,
   // Number of Bytes in the chunk
   // Nonce + headerBlob <= 1024 bytes
   // headerBlob <= 1000 bytes
@@ -29,13 +30,13 @@ module Miner
   //FIFO outputs
   output Next_O,
   
-  
-  // The give nonce is valid
+  // The given nonce is valid
   output Vld_O,
   output [255:0] Hash_O,
+  output [31:0] HashCounter_O,
+  output [NONCE_BYTE_LEN*8-1:0] Nonce_O,
   // Calculation is ready
   output Rdy_O
-  
   //ILA
   //output [2:0] Cond_O
  
@@ -50,35 +51,38 @@ module Miner
  
   // message inputs
   logic [15:0] [31:0] msg;
-  logic [15:0] [31:0] msg_next;
-  
-  shortint msg_cntr;
+  logic [15:0] [31:0] nonce_msg;
+  //pipeline counter
+  logic [80:0] [6:0] pipeline;
+  logic [6:0] ppln_cntr;
   
   // nonce
   logic [5:0] [31:0] nonce;
+  logic [NONCE_BYTE_LEN*8-1:0] nonce_reg;
+  logic [NONCE_BYTE_LEN*8-1:0] final_nonce;
  
   // hash output & result
   logic [7:0] [31:0] h_out;
-  logic [255:0] hash;
+  logic [2:0] [255:0] hash;
   logic vld_final_hash;
   
   //Calculation of hash is ready
   logic rdy_hash;
   
   logic [2:0] vld_hash;
-  logic next_block;
+  logic [1:0] next_block;
   
   // requesting the next word from the memory
-  logic next_word_reg;
   logic next_word;
   // updating the chunkhasher with new chunk
   logic new_chunk;
+  logic dbl_chunk;
   
   // byte counter
   logic [10:0] byte_cntr;
   
   // flag to show if double hash started
-  logic [1:0] dbl_hash;
+  logic [2:0] dbl_hash;
   
   logic [10:0] byte_num;
   
@@ -87,25 +91,82 @@ module Miner
   
   logic [7:0] group_index;
   //logic [7:0] chain_num;
-
   
-  ChunkHasher ChunkHasher_i(
+  logic dbl_vld_hash;
+  logic en_nonce_cnt;
+  
+  logic [31:0] hash_cntr_sum;
+  logic [$clog2(HASH_DELAY)-1:0] hash_cntr;
+  
+  logic clr;
+
+  assign clr = Clear_I || vld_final_hash;
+  
+  ChunkHasher #(
+    .HASH_DELAY(HASH_DELAY)
+    ) ChunkHasher_i(
     .Clk(Clk),
     .Rst_n(Rst_n),
+    .Clear_I(clr),
     .Update_I(new_chunk),
+    .DblUpdate_I(dbl_chunk),
     .Msg_I(msg),
     .Byte_num_I(byte_num),
-    .Next_O(next_block),
+    .Next_O(next_block[0]),
     .H_O(h_out),
-    .Vld_O(vld_hash[0])
+    .Vld_O(vld_hash[0]),
+    .CNTR_O(hash_cntr)
   );
   
-  assign nonce[0] = Nonce_I[191:160];
-  assign nonce[1] = Nonce_I[159:128];
-  assign nonce[2] = Nonce_I[127:96];
-  assign nonce[3] = Nonce_I[95:64];
-  assign nonce[4] = Nonce_I[63:32];
-  assign nonce[5] = Nonce_I[31:0];
+  assign en_nonce_cnt = (((state==FIRST_BLOCK) && (hash_cntr < HASH_DELAY)) || (state==DOUBLE_HASH && vld_hash[0]));
+  
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin : nonce_counter
+    if(~Rst_n) begin
+      nonce_reg <= 0;
+    end
+    else if(Update_I) begin
+      nonce_reg <= Nonce_I;
+    end
+    else if(en_nonce_cnt)
+      nonce_reg <= nonce_reg + 1;
+  end
+      
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin : nonce_register
+    if(~Rst_n) begin
+      nonce <= 0;
+    end
+    else begin
+      nonce[0] = nonce_reg[191:160];
+      nonce[1] = nonce_reg[159:128];
+      nonce[2] = nonce_reg[127:96];
+      nonce[3] = nonce_reg[95:64];
+      nonce[4] = nonce_reg[63:32];
+      nonce[5] = nonce_reg[31:0];
+    end
+  end
+
+  
+  always_comb
+  begin : nonce_message
+    if(state==FIRST_BLOCK) begin
+      msg[0] <= {<<8{nonce[0]}};
+      msg[1] <= {<<8{nonce[1]}};
+      msg[2] <= {<<8{nonce[2]}};
+      msg[3] <= {<<8{nonce[3]}};
+      msg[4] <= {<<8{nonce[4]}};
+      msg[5] <= {<<8{nonce[5]}};
+      msg[15:6] <= Msg_I[15:6];
+    end
+    else if(state==DOUBLE_HASH) begin
+      msg[15:8] <= 0;
+      msg[7:0] <= h_out[7:0];
+    end 
+    else
+      msg <= Msg_I;
+  end
+  
   
 ////////////////////////// 
 // Valid Shift Register //
@@ -115,11 +176,15 @@ module Miner
   begin : valid_shr
     if(~Rst_n) begin
       vld_hash[2:1] <= 2'b00;
-      dbl_hash[1] <= 1'b0;
+      dbl_hash[2:1] <= 2'b00;
+      next_block[1] <= 1'b0;
+      hash[1] <= 0;
     end
     else begin
       vld_hash[2:1] <= vld_hash[1:0];
-      dbl_hash[1] <= dbl_hash[0];
+      dbl_hash[2:1] <= dbl_hash[1:0];
+      next_block[1] <= next_block[0];
+      hash[1] <= hash[0];
     end
   end
   
@@ -148,16 +213,16 @@ module Miner
       end//IDLE
       
       FIRST_BLOCK: begin
-        if(Clear_I)
+        if(clr)
           next_state <= IDLE;
         else if(Update_I)
           next_state <= FIRST_BLOCK;
-        else if(msg_cntr==9 || ByteNum_I==0)
+        else if(next_block[0] || ByteNum_I==0)
           next_state <= MIDDLE_BLOCKS;
       end//FIRST_BLOCK
 
       MIDDLE_BLOCKS: begin
-        if(Clear_I)
+        if(clr)
           next_state <= IDLE;
         else if(Update_I)
           next_state <= FIRST_BLOCK;
@@ -167,13 +232,10 @@ module Miner
       end//MIDDLE_BLOCKS
       
       DOUBLE_HASH: begin
-        if(Clear_I)
+        if(clr)
           next_state <= IDLE;
-        else if(Update_I)
-          next_state <= FIRST_BLOCK;
-        // rising edge of the valid hash
-        else if(vld_hash[1:0]==2'b01)
-          next_state <= IDLE;   
+        else if(Update_I || (vld_hash[1:0]==2'b01))
+          next_state <= FIRST_BLOCK;  
       end//DOUBLE_HASH
 
       default:
@@ -185,108 +247,57 @@ module Miner
   always_ff@(posedge Clk or negedge Rst_n)
   begin : fsm_seq
     if(~Rst_n) begin
-      msg <= 0;
-      msg_next <= 0;
-      msg_cntr <= 0;
-      next_word_reg <= 0;
-      new_chunk <= 1'b0;
       dbl_hash[0] <= 1'b0;
-      byte_num <= 0;
     end  
     else begin
       case (state)
       
         IDLE: begin
-          msg <= 0;
-          msg_next <= 0;
-          msg_cntr <= 0;
-          next_word_reg <= 0;
-          new_chunk <= 1'b0;
           dbl_hash[0] <= 1'b0;
-          byte_num <= 0;
         end//IDLE
         
         FIRST_BLOCK: begin
-          dbl_hash[0] <= 1'b0;
-          byte_num <= ByteNum_I;
-          // first part of the message coming from the nonce
-          msg[0] <= {<<8{nonce[0]}};
-          msg[1] <= {<<8{nonce[1]}};
-          msg[2] <= {<<8{nonce[2]}};
-          msg[3] <= {<<8{nonce[3]}};
-          msg[4] <= {<<8{nonce[4]}};
-          msg[5] <= {<<8{nonce[5]}};
-          msg[msg_cntr+6] <= Msg_I;
-          // filling up the message fields with serial data
-          if(msg_cntr<9 && byte_cntr < ByteNum_I) begin
-            next_word_reg <= 1'b1;
-            new_chunk <= 1'b0;
-            if(next_word)
-              msg_cntr <= msg_cntr + 1;
-          end
-          else begin
-            msg_cntr <= 0;
-            next_word_reg <= 1'b0;
-            new_chunk <= 1'b1;
-            if(ByteNum_I==0)
-              msg <= 0;
-          end
+          if(next_block[0])
+            dbl_hash[0] <= 1'b0;
+
         end//FIRST_BLOCK
 
         MIDDLE_BLOCKS: begin
-          new_chunk <= 1'b0;
-          // request from the chunk hasher
-          if(next_block) begin
-            msg <= msg_next;
-            msg_next <= 0;
-            msg_cntr <= 0;
-          end
-          // filling up the message fields with the incoming data
-          if(next_word)
-            msg_next[msg_cntr] <= Msg_I;
-          // filling up the message fields with serial data
-          if(msg_cntr<15 && byte_cntr < ByteNum_I) begin
-            next_word_reg <= 1'b1;
-            if(next_word)
-              msg_cntr <= msg_cntr + 1;
-          end
-          else
-            next_word_reg <= 1'b0;
-          
+          // request from the chunk hasher        
         end// MIDDLE_BLOCKS
         
         DOUBLE_HASH: begin
-          byte_num <= 32;
-          msg[15:8] <= 0;
-          msg[7:0] <= h_out[7:0];
-          // start the new hashing
-          if(~dbl_hash[0]) begin
-            new_chunk <= 1'b1;
-          end
-          else
-            new_chunk <= 1'b0;
           // double hash has started
-          if(new_chunk)
+          if(vld_hash[1:0]==2'b01)
             dbl_hash[0] <= 1'b1;
             
         end//DOUBLE_HASH
         
         default: begin
-          msg <= 0;
-          msg_next <= 0;
-          msg_cntr <= 0;
-          next_word_reg <= 0;
-          new_chunk <= 1'b0;
           dbl_hash[0] <= 1'b0;
-          byte_num <= 0;
         end// default
         
       endcase
     end
   end
   
-  assign next_word = (next_word_reg && byte_cntr < ByteNum_I);
-  assign Next_O = next_word;
+  
+  assign next_word = (next_block[0] && (!vld_hash[0]) && byte_cntr < ByteNum_I);
+  assign Next_O = next_block[0] && (!vld_hash[0]);
+  
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin : new_chunk_reg
+    if(~Rst_n) 
+      dbl_chunk <= 0;
+    // start the new hashing
+    else if(state==MIDDLE_BLOCKS && (vld_hash[1:0]==2'b01)) begin
+      dbl_chunk <= 1'b1;
+    end
+    else
+      dbl_chunk <= 1'b0;
+  end
+  
+  assign new_chunk = Update_I;
   
 ////////////////////
 // Byte Counter   //
@@ -296,14 +307,38 @@ module Miner
   always_ff@(posedge Clk or negedge Rst_n)
   begin : byte_counter
     if(~Rst_n)
-      byte_cntr <= NONCE_BYTE_LEN;
+      byte_cntr <= 0;
     else if((vld_hash[1:0]==2'b01) || Update_I)
-      byte_cntr <= NONCE_BYTE_LEN;
+      byte_cntr <= 0;
     else if(next_word)
-      byte_cntr <= byte_cntr + 4;
+      byte_cntr <= byte_cntr + 512;
   end
   
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin : byte_num_reg
+    if(~Rst_n)
+      byte_num <= 0;
+    else if(Update_I || (dbl_vld_hash && vld_hash[0]))
+      byte_num <= ByteNum_I;
+    else if((state==MIDDLE_BLOCKS) && (vld_hash[1:0]==2'b01))
+      byte_num <= 32;
+  end
   
+//////////////////
+// Hash Counter //
+//////////////////
+
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin : hash_counter
+    if(~Rst_n)
+      hash_cntr_sum <= 0;
+    else if(Update_I)
+      hash_cntr_sum <= 0;
+    else if(dbl_hash[1] && !vld_final_hash)
+      hash_cntr_sum <= hash_cntr_sum + 1;
+  end
+  
+  assign HashCounter_O = hash_cntr_sum;
   
 ////////////////////
 // Handling hash  //
@@ -313,15 +348,15 @@ module Miner
   begin : valid_hash
     if(~Rst_n)
       hash  <= '1;
-    else if(vld_hash[0]) begin
-      hash[255:224] = {<<8{h_out[0]}};
-      hash[223:192] = {<<8{h_out[1]}};
-      hash[191:160] = {<<8{h_out[2]}};
-      hash[159:128] = {<<8{h_out[3]}};
-      hash[127:96] = {<<8{h_out[4]}};
-      hash[95:64] = {<<8{h_out[5]}};
-      hash[63:32] = {<<8{h_out[6]}};
-      hash[31:0] = {<<8{h_out[7]}};
+    else if(dbl_hash[0]) begin
+      hash[0][255:224] = {<<8{h_out[0]}};
+      hash[0][223:192] = {<<8{h_out[1]}};
+      hash[0][191:160] = {<<8{h_out[2]}};
+      hash[0][159:128] = {<<8{h_out[3]}};
+      hash[0][127:96] = {<<8{h_out[4]}};
+      hash[0][95:64] = {<<8{h_out[5]}};
+      hash[0][63:32] = {<<8{h_out[6]}};
+      hash[0][31:0] = {<<8{h_out[7]}};
     end
   end
   
@@ -335,17 +370,17 @@ module Miner
       group_index <= 0;
       //chain_num <= 0;
     end
-    else begin
+    else if(dbl_hash[1]) begin
       //chain_num <= ChainNum_I;
       //group_index <= hash[15:0]%chain_num;
       //bitwise AND with minus 1 -> modulus on the power of two
-      group_index <= hash[15:0] & (ChainNum_I-1);
+      group_index <= hash[0][15:0] & (ChainNum_I-1);
     end
   end
   
   //assign group_index = hash[15:0]%ChainNum_I;
   
-  assign conditions[0] = (hash <= Target_I);
+  assign conditions[0] = (hash[1] <= Target_I);
   assign conditions[1] = ((group_index>>GroupsShifter_I)==FromGroup_I);
   //assign conditions[2] = ((group_index%Groups_I)==ToGroup_I);
   //bitwise AND with minus 1 -> modulus on the power of two
@@ -356,21 +391,41 @@ module Miner
     if(~Rst_n) begin
       vld_final_hash  <= 0;
       rdy_hash <= 0;
+      hash[2] <= 0;
+      final_nonce <= 0;
     end
     else if(Update_I) begin
       vld_final_hash <= 0;
       rdy_hash <= 0;
+      hash[2] <= 0;
+      final_nonce <= 0;
     end
     // checking the conditions
-    else if(vld_hash==3'b111 && dbl_hash[1]) begin
-      vld_final_hash <= &conditions;
+    else if(dbl_hash[2]) begin
+      if(&conditions) begin
+        vld_final_hash <= 1'b1;
+        hash[2] <= hash[1];
+        final_nonce <= nonce_reg - (HASH_DELAY+4);
+      end
       rdy_hash <= 1'b1;
     end
   end
   
-  assign Hash_O = hash;
-  assign Rdy_O = rdy_hash;
+  assign Hash_O = hash[2];
+  assign Rdy_O = dbl_vld_hash & vld_hash[0];
+  assign Nonce_O = final_nonce;
   assign Vld_O = vld_final_hash;
+  
+  
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin : double_valid_hash
+    if(~Rst_n) begin
+      dbl_vld_hash <= 0;
+    end
+    else if(vld_hash[0]) begin
+      dbl_vld_hash <= ~dbl_vld_hash;
+    end
+  end
   
   //ILA
   //assign Cond_O = conditions;

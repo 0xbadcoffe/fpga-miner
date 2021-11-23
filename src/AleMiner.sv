@@ -2,7 +2,9 @@
 
 module AleMiner
   //262 bytes -> 66 addresses
-  #(parameter ADDR_WIDTH = 7)
+  #(parameter ADDR_WIDTH = 7,
+    parameter NONCE_BYTE_LEN = 24
+   )
   (
   // Clock & Reset
   input Clk,
@@ -54,6 +56,7 @@ module AleMiner
   logic [191:0] nonce;
   logic [255:0] hash;
   logic [255:0] final_hash;
+  logic [191:0] final_nonce;
   
   // group registers
   logic [7:0] groups; //4
@@ -67,11 +70,13 @@ module AleMiner
   logic [1:0] rdy_hash;
   
   //Memory signals
-  (* ram_style = "block" *) logic [31:0] memory [2**ADDR_WIDTH-1:0];
-  logic [ADDR_WIDTH-1:0] wrAddr;
+  logic [15:0][31:0] memory [5:0];
+  logic [ADDR_WIDTH-1:0] wrAddr [1:0];
+  logic [ADDR_WIDTH-1:0] wrIdx;
   logic [ADDR_WIDTH-1:0] rdAddr;
   
-  logic [31:0] msg;
+  
+  logic [15:0][31:0] msg ;
   logic rd;
   
   // hashing cycle finished without valid result
@@ -98,11 +103,22 @@ module AleMiner
   
   // Number of messages to be hashed
   // byte number = nonce + messages
-  assign wordNum = ((ChunkLength_I-24)>>2);
+  always_ff@(posedge Clk or negedge Rst_n)
+  begin: word_num_reg
+   if (~Rst_n)
+      wordNum <= 0;
+  else if (ChunkLength_I[1:0] != 0)
+      wordNum <= (((ChunkLength_I-NONCE_BYTE_LEN)>>2) + 1);
+  else
+      wordNum <= ((ChunkLength_I-NONCE_BYTE_LEN)>>2);
+  end
+
   
 /////////////////// 
 // Memory Update //
 ///////////////////
+  
+  assign wrIdx = (wrAddr[1]-6) + (wrAddr[0]<<4);
 
   always_ff@(posedge Clk or negedge Rst_n)
   begin : memory_update
@@ -114,7 +130,7 @@ module AleMiner
       update <= 1'b1;
       endOfMemory <= 0;
     end
-    else if(wrAddr==(wordNum-1) && Wr_I) begin
+    else if(wrIdx==(wordNum-1) && Wr_I) begin
       update <= 0;
       endOfMemory <= 1'b1;
     end
@@ -126,22 +142,58 @@ module AleMiner
 // RAM //
 /////////
 
-  always_ff@(posedge Clk)
+  always_ff@(posedge Clk or negedge Rst_n)
   begin : RAM
-    if (Wr_I) // write data to address 'addr'
-      memory[wrAddr] <= Data_I;
+    if(~Rst_n) begin
+      for(int i=0; i<6; i++) begin
+        for(int j=0; j<16; j++) begin
+            memory[i][j] = 0;
+        end
+      end
+    end
+    else if(UpdateTrigger_I) begin
+      for(int i=0; i<6; i++) begin
+        for(int j=0; j<16; j++) begin
+            memory[i][j] = 0;
+        end
+      end
+    end
+    else if (Wr_I) begin
+       // write data to address 'addr'
+      //last word
+      if((wrIdx==(wordNum-1)) && (ChunkLength_I[1:0] != 0))begin
+        case(ChunkLength_I[1:0])
+          2'b01: memory[wrAddr[0]][wrAddr[1]] <= {{24{1'b0}},Data_I[7:0]};
+          2'b10: memory[wrAddr[0]][wrAddr[1]] <= {{16{1'b0}},Data_I[15:0]};
+          2'b11: memory[wrAddr[0]][wrAddr[1]] <= {{8{1'b0}},Data_I[23:0]}; 
+          default: memory[wrAddr[0]][wrAddr[1]] <= Data_I;
+        endcase
+      end
+      else
+        memory[wrAddr[0]][wrAddr[1]] <= Data_I;
+    end
   end
   
   assign msg = memory[rdAddr];
   
   always_ff@(posedge Clk or negedge Rst_n)
   begin : write_address
-    if(~Rst_n)
-      wrAddr <= 0;
-    else if(UpdateTrigger_I)
-      wrAddr <= 0;
-    else if(Wr_I)
-      wrAddr++;
+    if(~Rst_n) begin
+      wrAddr[0] <= 0;
+      wrAddr[1] <= 6;
+    end
+    else if(UpdateTrigger_I) begin
+      wrAddr[0] <= 0;
+      wrAddr[1] <= 6;
+    end
+    else if(Wr_I) begin
+      if(wrAddr[1]==15) begin
+        wrAddr[1] <= 0;
+        wrAddr[0] <= wrAddr[0] + 1;
+      end
+      else
+        wrAddr[1] <= wrAddr[1] + 1;
+    end
   end
   
   always_ff@(posedge Clk or negedge Rst_n)
@@ -163,11 +215,12 @@ module AleMiner
     if(~Rst_n)
       strt <= 0;
     else
-      strt <= endOfMemory || invld_hash;
+      strt <= endOfMemory;//|| invld_hash;
   end
   
-  Miner Miner_i
-  (
+  Miner  #(
+    .NONCE_BYTE_LEN(NONCE_BYTE_LEN)
+  ) Miner_i (
     .Clk(Clk),
     .Rst_n(Rst_n),
     .Update_I(strt),
@@ -183,8 +236,10 @@ module AleMiner
     .Target_I(target),
     .Next_O(rd),
     .Vld_O(vld_hash[0]),
-    .Rdy_O(rdy_hash[0]),
-    .Hash_O(hash)
+    .Hash_O(final_hash),
+    .HashCounter_O(hash_cntr),
+    .Nonce_O(final_nonce),
+    .Rdy_O(rdy_hash[0])
     //ILA
     //.Cond_O(conditions)
   );
@@ -212,16 +267,6 @@ module AleMiner
 /////////////////// 
 // Hash Counter //
 ///////////////////
-
-  always_ff@(posedge Clk or negedge Rst_n)
-  begin : hash_counter
-    if(~Rst_n)
-      hash_cntr <= 0;
-    else if(UpdateTrigger_I)
-      hash_cntr <= 0;
-    else if(rdy_hash==2'b01)
-      hash_cntr++;
-  end
   
   assign HashCounter_O = hash_cntr;
   
@@ -252,10 +297,6 @@ module AleMiner
       from_group <= GroupDirections_I[23:16];
       to_group <= GroupDirections_I[7:0];
     end
-    // hashing cycle finished without valid result
-    // no memory update ungoing
-    else if(invld_hash && !update)
-      nonce++;
   end
   
   always_ff@(posedge Clk or negedge Rst_n)
@@ -263,18 +304,15 @@ module AleMiner
     if(~Rst_n) begin
       vld_nonce <= 0;
       irq <= 1'b0;
-      final_hash <= {256{1'b1}};
     end
     // new mining cycle
     else if(UpdateTrigger_I) begin
       vld_nonce <= 1'b0;
       irq <= 1'b0;
-      final_hash <= {256{1'b1}};
     end
     // valid hash has been found
     else begin
-      if (rdy_hash==2'b01 && vld_hash==2'b01) begin
-        final_hash <= hash;
+      if (vld_hash==2'b01) begin
         vld_nonce <= 1'b1;
         irq <= 1'b1;
       end
@@ -286,12 +324,12 @@ module AleMiner
   assign VldNonce_O = vld_nonce;
   assign Irq_O = irq;
   
-  assign Nonce_O[0] = nonce[31:0];
-  assign Nonce_O[1] = nonce[63:32];
-  assign Nonce_O[2] = nonce[95:64];
-  assign Nonce_O[3] = nonce[127:96]; 
-  assign Nonce_O[4] = nonce[159:128];
-  assign Nonce_O[5] = nonce[191:160];
+  assign Nonce_O[0] = final_nonce[31:0];
+  assign Nonce_O[1] = final_nonce[63:32];
+  assign Nonce_O[2] = final_nonce[95:64];
+  assign Nonce_O[3] = final_nonce[127:96]; 
+  assign Nonce_O[4] = final_nonce[159:128];
+  assign Nonce_O[5] = final_nonce[191:160];
   
   assign Hash_O[0] = final_hash[31:0];
   assign Hash_O[1] = final_hash[63:32];

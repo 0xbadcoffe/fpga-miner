@@ -3,12 +3,15 @@
 `include "defines.sv"
 
 module HashGen
-  #(parameter ROUND_NUM = 7)
+  #(parameter ROUND_NUM = 7,
+    parameter HASH_DELAY = 71)
   (
   // Clock
   input  Clk,
   // Inputs
   input Strt_I,
+  input Clear_I,
+  input EN_I,
   // block length in bytes
   input [31:0] BL_I,
   // chunk start
@@ -22,6 +25,8 @@ module HashGen
   // Outputs
   output Vld_O,
   
+  output [$clog2(HASH_DELAY)-1:0] CNTR_O,
+  
   // Outputs
   output [7:0] [31:0] H_O
   );
@@ -34,13 +39,13 @@ module HashGen
   localparam integer perm_num [0:15] = {
     2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8
   };
-  
-  localparam shortint ROUND_DELAY = 10;
-  localparam shortint HASH_DELAY = (ROUND_NUM*ROUND_DELAY) + 5;
+
   
   
   logic [15:0][ROUND_NUM-1:0][31:0] MsgArray;
   logic [15:0][ROUND_NUM:0][31:0] VArray;
+  
+  logic [9:0][15:0][ROUND_NUM-2:0][31:0] MsgArrayShr;
   
   
   // set of domain separation bit flags
@@ -105,11 +110,15 @@ module HashGen
       cntr_reg <= 0;
       strt_flg <= 1'b1;
     end
-    else if(cntr_reg < HASH_DELAY)
+    else if(Clear_I)
+      cntr_reg <= 0;
+    else if((cntr_reg < HASH_DELAY) && EN_I)
       cntr_reg++;
     else
       cntr_reg <= cntr_reg;
   end
+  
+  assign CNTR_O = cntr_reg;
   
   // valid register
   always@(posedge Clk) 
@@ -132,8 +141,12 @@ module HashGen
         begin
             always@(posedge Clk)
             begin : message_permutation
-            MsgArray[j][i] <= MsgArray[perm_num[j]][i-1];
+              MsgArrayShr[0][j][i-1] <= MsgArray[j][i-1];
+              for (int k = 0; k < 9; k = k + 1) begin
+                MsgArrayShr[k+1][j][i-1] <= MsgArrayShr[k][j][i-1];
+              end
             end
+          assign MsgArray[j][i] = MsgArrayShr[9][perm_num[j]][i-1];
         end
       end
       

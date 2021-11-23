@@ -1,7 +1,7 @@
 
 module AleMinerTB;
 
-  parameter byte_num = 288;
+  parameter byte_num = 328;
 
   logic clk, rst_n, strt, wr, irq;
   
@@ -20,13 +20,15 @@ module AleMinerTB;
   logic [7:0][31:0] target;
   logic [7:0][31:0] hash;
   
-  logic [31:0] byte_length = byte_num;
+  logic [31:0] byte_length = byte_num-2;
  
   int clk_cntr = 0;
   
   logic [31:0] hash_cntr;
   
   shortint data_cntr;
+  
+  logic clr = 0;
   
   
   AleMiner DUT
@@ -47,17 +49,7 @@ module AleMinerTB;
     .Hash_O(hash),
     .Irq_O(irq) 
   );
-  
-  
-  assign target[0] = 32'h0;
-  assign target[1] = 32'h1;
-  assign target[2] = 32'h2;
-  assign target[3] = 32'h3;
-  assign target[4] = 32'h4;
-  assign target[5] = 32'h5;
-  assign target[6] = 32'h6;
-  assign target[7] = 32'hf0010000;
-  
+    
   
   initial clk = 0;
   always #5 clk = ~clk;
@@ -76,16 +68,36 @@ module AleMinerTB;
     strt = 1'b0;
   endtask : start_pulse
   
+  task write_cycle;
+  
+    data_cntr = 0;
+    clr = 1;
+    #20;
+    clr = 0;
+    start_pulse();
+    
+    @(posedge clk);
+    #2;
+    wr = 1;
+    while(data_cntr <= (byte_num - 28)) begin
+      @(posedge clk);
+      data_cntr = data_cntr + 4;
+    end
+    #2;
+    wr = 0;
+  
+  endtask : write_cycle
+  
   
   // message generator
   always@(posedge clk)
   begin : msg_gen
     if(~rst_n) begin
-      data_byte <= 8'h18;
-      data_cntr <= 0;
+      data_byte <= 8'h18;   
     end
+    else if(clr)
+      data_byte <= 8'h18;
     else if(wr) begin
-      data_cntr <= data_cntr + 4;
       if(data_byte < 247)
         data_byte <= data_byte + 4;
       else
@@ -138,34 +150,41 @@ module AleMinerTB;
     nonce_in[4] = 32'h04050607;
     nonce_in[5] = 32'h00010203;
     
+    target[0] = 32'h0;
+    target[1] = 32'h1;
+    target[2] = 32'h2;
+    target[3] = 32'h3;
+    target[4] = 32'h4;
+    target[5] = 32'h5;
+    target[6] = 32'h6;
+    target[7] = 32'hf0010000;
+    
     #100;
     
-    start_pulse();
-    
-    @(posedge clk);
-    #2;
-    wr = 1;
-    while(data_cntr!= (byte_num - 28)) begin
-      @(posedge clk);
-    end
-    #2;
-    wr = 0;
+    write_cycle();
+
     
     while(irq!=1'b1) begin
-
-      while(DUT.rdy_hash!= 2'b11)
-        @(posedge clk);
-      if(DUT.Miner_i.conditions!=0) begin
+      if(vld[0]) begin
         $display("%d Nonce: %0h valid: %b conditions: %b", hash_cntr, (nonce_out-1), vld, DUT.Miner_i.conditions);
         $display("Hash: %0h ", DUT.hash);
       end
       @(posedge clk);
       @(posedge clk);
     end 
-    $display("Final nonce: %0h hash: %0h ", nonce_out, {hash[7],hash[6],hash[5],hash[4],hash[3],hash[2],hash[1],hash[0]});
+    $display("start_pulseFinal nonce: %0h hash: %0h ", nonce_out, {hash[7],hash[6],hash[5],hash[4],hash[3],hash[2],hash[1],hash[0]});
     #500;
-    start_pulse();
     #1000;
+    
+    write_cycle();
+
+    #10000;
+    
+    target[7] = 32'h0A010000;
+    
+    write_cycle();
+    
+    #10000;
     
     $display("End of simulation time is %d ",$time);
     $finish;
