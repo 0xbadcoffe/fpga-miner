@@ -37,13 +37,13 @@
 #define WORKGROUP_SIZE (256)
 #define MAX_LENGTH 8192
 #define INST_NUM 2
-#define NCU 9
+#define NCU 10
 #define TARGET_LENGTH 8
 #define NONCE_LENGTH 6
 #define HEADERBLOB_LENGTH 76
 #define HASHCOUNTER_LENGTH 1
 #define CHUNK_LENGTH 326
-#define NONCE_DIFF 1048576
+#define NONCE_DIFF 104857600
 #define MEM_ALIGNMENT 4096
 #if defined(VITIS_PLATFORM) && !defined(TARGET_DEVICE)
 #define STR_VALUE(arg)      #arg
@@ -177,6 +177,10 @@ void copy_results(miner_request_t* miner_req) {
 	for(cl_uint i = 0; i < 3; i++) {
 		clReleaseMemObject(miner_req->mSrc[i]);
 		clReleaseMemObject(miner_req->mDst[i]);
+	}
+
+	for(cl_uint i = 0; i < 3; i++) {
+		clReleaseEvent(miner_req->mEvent[i]);
 	}
 
 
@@ -468,15 +472,15 @@ void AlephMinerReleaser(queue_t queue_s)
 
 
 
-void free_buffers(cl_uint* target, cl_uint* headerblob, cl_uint* noncein, cl_uint* nonceout, cl_uint* hashcounter, cl_uint* hash)
-{
-	free(target);
-    free(headerblob);
-    free(noncein);
-    free(nonceout);
-    free(hashcounter);
-    free(hash);
-}
+//void free_buffers(cl_uint* target, cl_uint* headerblob, cl_uint* noncein, cl_uint* nonceout, cl_uint* hashcounter, cl_uint* hash)
+//{
+//	free(target);
+//    free(headerblob);
+//    free(noncein);
+//    free(nonceout);
+//    free(hashcounter);
+//    free(hash);
+//}
 
 int configure_board(device_config_t *dev_conf,  char** argv)
 {
