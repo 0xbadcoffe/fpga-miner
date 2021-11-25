@@ -687,7 +687,7 @@ task automatic backdoor_fill_memories(integer unsigned iter);
   target[6] = 32'hffffffff;
   target[7] = 32'h000fffff;
   if(iter==1)
-    target[7] = 32'hffffffff;
+    target[7] = 32'h0fffffff;
 
   nonce[0] = 32'h14151617;
   nonce[1] = 32'h10111213;

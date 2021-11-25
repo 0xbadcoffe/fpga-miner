@@ -11,6 +11,7 @@ module AleMiner
   input Rst_n,
   // Register inputs
   input UpdateTrigger_I,
+  input Clear_I,
   input [31:0] GroupDirections_I,
   input [31:0] Groups_I,
   input [31:0] ChunkLength_I,
@@ -224,7 +225,7 @@ module AleMiner
     .Clk(Clk),
     .Rst_n(Rst_n),
     .Update_I(strt),
-    .Clear_I(UpdateTrigger_I),
+    .Clear_I(UpdateTrigger_I || Clear_I),
     .Msg_I(msg),
     .ByteNum_I(ChunkLength_I[10:0]),
     .FromGroup_I(from_group),

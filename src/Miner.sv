@@ -347,7 +347,7 @@ module Miner
   always_ff@(posedge Clk or negedge Rst_n)
   begin : valid_hash
     if(~Rst_n)
-      hash  <= '1;
+      hash[0]  <= '1;
     else if(dbl_hash[0]) begin
       hash[0][255:224] = {<<8{h_out[0]}};
       hash[0][223:192] = {<<8{h_out[1]}};

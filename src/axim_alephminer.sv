@@ -4,7 +4,7 @@ module axim_alephminer
 	#(C_M00_AXI_ADDR_WIDTH = 64, 
     C_M00_AXI_DATA_WIDTH = 32,
     INST_NUM = 2,
-    MINING_STEPS = 1000000
+    MINING_STEPS = 10000000
     )
   (
   // System Signals
@@ -373,6 +373,7 @@ module axim_alephminer
         .Clk(ap_clk),
         .Rst_n(areset_n),
         .UpdateTrigger_I(update_miner),
+        .Clear_I(ap_done),
         .GroupDirections_I(group_directions),
         .Groups_I(groups_w),
         .ChunkLength_I(chunk_length),
@@ -557,8 +558,8 @@ module axim_alephminer
     // one of the miners found a valid value
     else if(ap_start_pulse)
       invld_hash_reg <= 1'b0;
-    else
-      invld_hash_reg <= invld_hash;
+    else if(invld_hash)
+      invld_hash_reg <= 1'b1;
   end
   
   assign invld_hash_pulse = (!invld_hash_reg && invld_hash);
