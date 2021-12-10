@@ -113,7 +113,7 @@ void event_cb(cl_event event, cl_int cmd_status, void *id)
     //mining_counts[chain_index] += (uint64_t)worker->hash_count;
 
     free_template(template_ptr);
-    free_buffers(&G_MINER_REQS[*(int*)id]);
+    //free_buffers(&G_MINER_REQS[*(int*)id]);
 
     worker->async.data = worker;
     assert(worker->async.data != NULL);
@@ -125,12 +125,12 @@ void event_cb(cl_event event, cl_int cmd_status, void *id)
 void start_worker_mining(mining_worker_t *worker)
 {
 
-	G_MINER_REQS[worker->id].TargetIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,TARGET_LENGTH * sizeof(cl_uint*));
-	G_MINER_REQS[worker->id].HeaderBlobIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,HEADERBLOB_LENGTH * sizeof(cl_uint*));
-	G_MINER_REQS[worker->id].NonceIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,NONCE_LENGTH*INST_NUM * sizeof(cl_uint*));
-	G_MINER_REQS[worker->id].NonceOut = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,NONCE_LENGTH * sizeof(cl_uint*));
-	G_MINER_REQS[worker->id].HashCounterOut = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,sizeof(cl_uint*));
-	G_MINER_REQS[worker->id].HashOut = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,TARGET_LENGTH * sizeof(cl_uint*));
+	//G_MINER_REQS[worker->id].TargetIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,TARGET_LENGTH * sizeof(cl_uint*));
+	//G_MINER_REQS[worker->id].HeaderBlobIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,HEADERBLOB_LENGTH * sizeof(cl_uint*));
+	//G_MINER_REQS[worker->id].NonceIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,NONCE_LENGTH*INST_NUM * sizeof(cl_uint*));
+	//G_MINER_REQS[worker->id].NonceOut = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,NONCE_LENGTH * sizeof(cl_uint*));
+	//G_MINER_REQS[worker->id].HashCounterOut = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,sizeof(cl_uint*));
+	//G_MINER_REQS[worker->id].HashOut = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,TARGET_LENGTH * sizeof(cl_uint*));
     // printf("start mine: %d %d\n", work->job->from_group, work->job->to_group);
     reset_worker(worker);
     //auto fpga_begin = std::chrono::high_resolution_clock::now();
@@ -404,6 +404,10 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < parallel_mining_works; i++)
     {
+    	G_MINER_REQS[i].TargetIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,TARGET_LENGTH * sizeof(cl_uint*));
+    	G_MINER_REQS[i].HeaderBlobIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,HEADERBLOB_LENGTH * sizeof(cl_uint*));
+    	G_MINER_REQS[i].NonceIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,NONCE_LENGTH*INST_NUM * sizeof(cl_uint*));
+    	G_MINER_REQS[i].Results = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,(NONCE_LENGTH+1+TARGET_LENGTH) * sizeof(cl_uint*));
         uv_async_init(loop, &(mining_workers[i].async), mine_with_async);
         uv_timer_init(loop, &(mining_workers[i].timer));
     }

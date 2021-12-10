@@ -29,6 +29,7 @@
 #include "xclhal2.h"
 #include "worker.h"
 #include "uv.h"
+#include "constants.h"
 #include <vector>
 // This file is required for OpenCL C++ wrapper APIs
 //#include "xcl2.hpp"
@@ -37,13 +38,13 @@
 #define WORKGROUP_SIZE (256)
 #define MAX_LENGTH 8192
 #define INST_NUM 2
-#define NCU 10
+#define NCU parallel_mining_works
 #define TARGET_LENGTH 8
 #define NONCE_LENGTH 6
 #define HEADERBLOB_LENGTH 76
 #define HASHCOUNTER_LENGTH 1
 #define CHUNK_LENGTH 326
-#define NONCE_DIFF 104857600
+#define NONCE_DIFF mining_steps
 #define MEM_ALIGNMENT 4096
 #if defined(VITIS_PLATFORM) && !defined(TARGET_DEVICE)
 #define STR_VALUE(arg)      #arg
@@ -69,11 +70,9 @@ typedef struct miner_request_t {
   cl_uint* NonceIn;
   cl_uint* TargetIn;
   cl_uint* HeaderBlobIn;
-  cl_uint* NonceOut;
-  cl_uint* HashCounterOut;
-  cl_uint* HashOut;
+  cl_uint* Results;
   cl_mem  mSrc[3];
-  cl_mem  mDst[3];
+  cl_mem  mDst[1];
 }miner_request_t;
 
 void sync(miner_request_t *miner_req)
@@ -155,29 +154,33 @@ void event_cb(cl_event event, cl_int cmd_status, void *id);
 
 void copy_results(miner_request_t* miner_req) {
 
-	//printf("#%d thread has finished", miner_req->mId);
+	//printf("#%d thread has finished\n", miner_req->mId);
+	unsigned int mId = miner_req->mId;
 
-	for(cl_uint i = 0; i < NONCE_LENGTH; i++) {
-	    mining_workers[miner_req->mId].nonce[i*4] = (miner_req->NonceOut[NONCE_LENGTH-i-1] >> 24) & 0xFF;
-	    mining_workers[miner_req->mId].nonce[i*4+1] = (miner_req->NonceOut[NONCE_LENGTH-i-1] >> 16) & 0xFF;
-	    mining_workers[miner_req->mId].nonce[i*4+2] = (miner_req->NonceOut[NONCE_LENGTH-i-1] >> 8) & 0xFF;
-	    mining_workers[miner_req->mId].nonce[i*4+3] = miner_req->NonceOut[NONCE_LENGTH-i-1] & 0xFF;
-	}
-
-	mining_workers[miner_req->mId].hash_count=(uint32_t)miner_req->HashCounterOut[0];
-	//printf("HASHCOUNTER #%d - output=0x%x\n",miner_req->mId,  mining_workers[miner_req->mId].hash_count);
-
-	for(cl_uint i = 0; i < TARGET_LENGTH; i++) {
-	    mining_workers[miner_req->mId].hash[i*4] =   (miner_req->HashOut[TARGET_LENGTH-i-1] >> 24) & 0xFF;
-	    mining_workers[miner_req->mId].hash[i*4+1] = (miner_req->HashOut[TARGET_LENGTH-i-1] >> 16) & 0xFF;
-	    mining_workers[miner_req->mId].hash[i*4+2] = (miner_req->HashOut[TARGET_LENGTH-i-1] >> 8) & 0xFF;
-	    mining_workers[miner_req->mId].hash[i*4+3] =  miner_req->HashOut[TARGET_LENGTH-i-1] & 0xFF;
+	for(cl_uint i = 0; i < (NONCE_LENGTH+1+TARGET_LENGTH); i++) {
+		if(i<NONCE_LENGTH) {
+			mining_workers[mId].nonce[i*4] = (miner_req->Results[i] >> 24) & 0xFF;
+			mining_workers[mId].nonce[i*4+1] = (miner_req->Results[i] >> 16) & 0xFF;
+			mining_workers[mId].nonce[i*4+2] = (miner_req->Results[i] >> 8) & 0xFF;
+			mining_workers[mId].nonce[i*4+3] = miner_req->Results[i] & 0xFF;
+			//printf("Nonce - array index %d output=0x%x\n", i,  miner_req->Results[i]);
+		} else if(i==NONCE_LENGTH) {
+			mining_workers[mId].hash_count=(uint32_t)miner_req->Results[i];
+			//printf("Hashcounter - array index %d output=0x%x\n", i,  miner_req->Results[i]);
+		} else {
+			mining_workers[mId].hash[(i-(NONCE_LENGTH+1))*4] =   (miner_req->Results[i] >> 24) & 0xFF;
+			mining_workers[mId].hash[(i-(NONCE_LENGTH+1))*4+1] = (miner_req->Results[i] >> 16) & 0xFF;
+			mining_workers[mId].hash[(i-(NONCE_LENGTH+1))*4+2] = (miner_req->Results[i] >> 8) & 0xFF;
+			mining_workers[mId].hash[(i-(NONCE_LENGTH+1))*4+3] =  miner_req->Results[i] & 0xFF;
+			//printf("Hash - array index %d output=0x%x\n", i,  miner_req->Results[i]);
+		}
 	}
 
 	for(cl_uint i = 0; i < 3; i++) {
 		clReleaseMemObject(miner_req->mSrc[i]);
-		clReleaseMemObject(miner_req->mDst[i]);
 	}
+
+	clReleaseMemObject(miner_req->mDst[0]);
 
 	for(cl_uint i = 0; i < 3; i++) {
 		clReleaseEvent(miner_req->mEvent[i]);
@@ -185,11 +188,13 @@ void copy_results(miner_request_t* miner_req) {
 
 
 	//checking the invalid bit
-	if((mining_workers[miner_req->mId].hash_count & 0x80000000)==0) {
-		store_worker_found_good_hash(&mining_workers[miner_req->mId], true);
+	if((mining_workers[mId].hash_count & 0x80000000)==0) {
+		store_worker_found_good_hash(&mining_workers[mId], true);
+		//printf("Hashcounter - valid 0x%x\n",mining_workers[mId].hash_count);
 	} else {
 		//removing the invalid bit from the hash count value
-		mining_workers[miner_req->mId].hash_count = (mining_workers[miner_req->mId].hash_count & 0x7FFFFFFF);
+		mining_workers[mId].hash_count = (mining_workers[mId].hash_count & 0x7FFFFFFF);
+		//printf("Hashcounter - invalid 0x%x\n",mining_workers[mId].hash_count);
 	}
 
 }
@@ -252,9 +257,7 @@ void AlephMinerOperator(
 
 
 		cl_mem_ext_ptr_t  mSrcExt[3];
-		cl_mem_ext_ptr_t  mDstExt[3];
-		cl_mem            mSrc[3];
-		cl_mem            mDst[3];
+		cl_mem_ext_ptr_t  mDstExt[1];
 		cl_int            mErr;
 
 		size_t global = 1;
@@ -274,9 +277,12 @@ void AlephMinerOperator(
 			unsigned char GroupsShifter = (Groups/2);
 			unsigned char ChainNum = chain_nums;
 			unsigned short ChunkLength = CHUNK_LENGTH;
+			unsigned int MiningSteps = mining_steps;
 
 			uint8_t data_var[4];
 			int8_t target_idx = 0;
+
+			//printf("AlephMinerOperator %d\n", miner_req->mId);
 
 
 			//req->HeaderBlobIn = &(unsigned int)header->blob;
@@ -362,31 +368,10 @@ void AlephMinerOperator(
 	//mDstExt[0].flags = membank| XCL_MEM_TOPOLOGY;
 	//mDstExt[0].param = 0;
 	//mDstExt[0].obj   = miner_req->NonceOut;
-    miner_req->mDst[0] = clCreateBuffer(queue_s.mContext,   CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,  sizeof(cl_uint) * NONCE_LENGTH, miner_req->NonceOut, &mErr);
+    miner_req->mDst[0] = clCreateBuffer(queue_s.mContext,   CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,  sizeof(cl_uint) * (NONCE_LENGTH+1+TARGET_LENGTH), miner_req->Results, &mErr);
     //G_NONCEOUT[miner_req->mId]  = clCreateBuffer(queue_s.mContext, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,  sizeof(cl_uint) * NONCE_LENGTH, miner_req->NonceOut, &mErr);
     if (mErr != CL_SUCCESS) {
-    	printf("Return code for clCreateBuffer on NonceOut: 0x%x\n",  mErr);
-    }
-
-
-    // Create output buffer for Hash (device to host)
-	//mDstExt[1].flags = membank | XCL_MEM_TOPOLOGY;
-	//mDstExt[1].param = 0;
-	//mDstExt[1].obj   = miner_req->HashCounterOut;//G_HASHCOUNTER[(req->mId)];
-    miner_req->mDst[1] = clCreateBuffer(queue_s.mContext,  CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,  sizeof(cl_uint), miner_req->HashCounterOut, &mErr);
-    //G_HASHCOUNTER[miner_req->mId] = clCreateBuffer(queue_s.mContext, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,  sizeof(cl_uint), miner_req->HashCounterOut, &mErr);
-    if (mErr != CL_SUCCESS) {
-    	printf("Return code for clCreateBuffer on mHashCounterOut: 0x%x\n",  mErr);
-    }
-
-    // Create output buffer for Hash (device to host)
-	//mDstExt[2].flags = membank | XCL_MEM_TOPOLOGY;
-	//mDstExt[2].param = 0;
-	//mDstExt[2].obj   = miner_req->HashOut;
-    miner_req->mDst[2] = clCreateBuffer(queue_s.mContext,  CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,  sizeof(cl_uint) * TARGET_LENGTH, miner_req->HashOut, &mErr);
-    //G_HASH[miner_req->mId] = clCreateBuffer(queue_s.mContext, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,  sizeof(cl_uint) * TARGET_LENGTH, miner_req->HashOut, &mErr);
-    if (mErr != CL_SUCCESS) {
-    	printf("Return code for clCreateBuffer on mHashOut: 0x%x\n",  mErr);
+    	printf("Return code for clCreateBuffer on Results: 0x%x\n",  mErr);
     }
 
 
@@ -407,12 +392,12 @@ void AlephMinerOperator(
     mErr |= clSetKernelArg(mKernel, 3, sizeof(unsigned char), &GroupsShifter);
     mErr |= clSetKernelArg(mKernel, 4, sizeof(unsigned char), &ChainNum);
     mErr |= clSetKernelArg(mKernel, 5, sizeof(unsigned short), &ChunkLength);
-    mErr |= clSetKernelArg(mKernel, 6, sizeof(cl_mem),  &miner_req->mSrc[0]);
-    mErr |= clSetKernelArg(mKernel, 7, sizeof(cl_mem),  &miner_req->mSrc[1]);
-    mErr |= clSetKernelArg(mKernel, 8, sizeof(cl_mem),  &miner_req->mSrc[2]);
-    mErr |= clSetKernelArg(mKernel, 9, sizeof(cl_mem),  &miner_req->mDst[0]);
-    mErr |= clSetKernelArg(mKernel, 10, sizeof(cl_mem), &miner_req->mDst[1]);
-    mErr |= clSetKernelArg(mKernel, 11, sizeof(cl_mem), &miner_req->mDst[2]);
+    mErr |= clSetKernelArg(mKernel, 6, sizeof(unsigned int), &MiningSteps);
+    mErr |= clSetKernelArg(mKernel, 7, sizeof(cl_mem),  &miner_req->mSrc[0]);
+    mErr |= clSetKernelArg(mKernel, 8, sizeof(cl_mem),  &miner_req->mSrc[1]);
+    mErr |= clSetKernelArg(mKernel, 9, sizeof(cl_mem),  &miner_req->mSrc[2]);
+    mErr |= clSetKernelArg(mKernel, 10, sizeof(cl_mem),  &miner_req->mDst[0]);
+
 
 
     if (mErr != CL_SUCCESS) {
@@ -446,17 +431,17 @@ void AlephMinerOperator(
 	mErr = 0;
 
 
-	mErr |= clEnqueueMigrateMemObjects(queue_s.mQueue, 3, miner_req->mDst, CL_MIGRATE_MEM_OBJECT_HOST, 1, &miner_req->mEvent[1], &miner_req->mEvent[2]);
+	mErr |= clEnqueueMigrateMemObjects(queue_s.mQueue, 1, miner_req->mDst, CL_MIGRATE_MEM_OBJECT_HOST, 1, &miner_req->mEvent[1], &miner_req->mEvent[2]);
 
 	if (mErr != CL_SUCCESS) {
 	printf("ERROR: Failed to read output array! %d\n", mErr);
 	printf("ERROR: Test failed\n");
-}
+	}
 
 	// Register call back to notify of kernel completion
 	clSetEventCallback(miner_req->mEvent[2], CL_COMPLETE, event_cb, &miner_req->mId);
 
-
+	//printf("end of operator\n");
 
 	//return req;
   }
@@ -470,17 +455,6 @@ void AlephMinerReleaser(queue_t queue_s)
   }
 
 
-
-
-//void free_buffers(cl_uint* target, cl_uint* headerblob, cl_uint* noncein, cl_uint* nonceout, cl_uint* hashcounter, cl_uint* hash)
-//{
-//	free(target);
-//    free(headerblob);
-//    free(noncein);
-//    free(nonceout);
-//    free(hashcounter);
-//    free(hash);
-//}
 
 int configure_board(device_config_t *dev_conf,  char** argv)
 {
@@ -619,9 +593,8 @@ void free_buffers(miner_request_t* miner_req)
 	free(miner_req->NonceIn      );
     free(miner_req->TargetIn    );
     free(miner_req->HeaderBlobIn );
-    free(miner_req->NonceOut    );
-    free(miner_req->HashCounterOut);
-    free(miner_req->HashOut     );
+    free(miner_req->Results    );
+
 }
 
 #endif /* SRC_FPGA_MINER_H_ */
