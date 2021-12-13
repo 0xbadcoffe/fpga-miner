@@ -97,12 +97,11 @@ wire [8-1:0]                        Groups                        ;
 wire [8-1:0]                        GroupsShifter                 ;
 wire [8-1:0]                        ChainNum                      ;
 wire [16-1:0]                       ChunkLength                   ;
+wire [32-1:0]                       MiningSteps                   ;
 wire [64-1:0]                       TargetIn                      ;
 wire [64-1:0]                       HeaderBlobIn                  ;
 wire [64-1:0]                       NonceIn                       ;
-wire [64-1:0]                       NonceOut                      ;
-wire [64-1:0]                       HashCounterOut                ;
-wire [64-1:0]                       HashOut                       ;
+wire [64-1:0]                       Results                       ;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Begin control interface RTL.  Modifying not recommended.
@@ -115,56 +114,54 @@ AlephMiner_control_s_axi #(
   .C_S_AXI_DATA_WIDTH ( C_S_AXI_CONTROL_DATA_WIDTH )
 )
 inst_control_s_axi (
-  .ACLK           ( ap_clk                ),
-  .ARESET         ( 1'b0                  ),
-  .ACLK_EN        ( 1'b1                  ),
-  .AWVALID        ( s_axi_control_awvalid ),
-  .AWREADY        ( s_axi_control_awready ),
-  .AWADDR         ( s_axi_control_awaddr  ),
-  .WVALID         ( s_axi_control_wvalid  ),
-  .WREADY         ( s_axi_control_wready  ),
-  .WDATA          ( s_axi_control_wdata   ),
-  .WSTRB          ( s_axi_control_wstrb   ),
-  .ARVALID        ( s_axi_control_arvalid ),
-  .ARREADY        ( s_axi_control_arready ),
-  .ARADDR         ( s_axi_control_araddr  ),
-  .RVALID         ( s_axi_control_rvalid  ),
-  .RREADY         ( s_axi_control_rready  ),
-  .RDATA          ( s_axi_control_rdata   ),
-  .RRESP          ( s_axi_control_rresp   ),
-  .BVALID         ( s_axi_control_bvalid  ),
-  .BREADY         ( s_axi_control_bready  ),
-  .BRESP          ( s_axi_control_bresp   ),
-  .interrupt      ( interrupt             ),
-  .ap_start       ( ap_start              ),
-  .ap_done        ( ap_done               ),
-  .ap_ready       ( ap_ready              ),
-  .ap_idle        ( ap_idle               ),
-  .FromGroup      ( FromGroup             ),
-  .ToGroup        ( ToGroup               ),
-  .Groups         ( Groups                ),
-  .GroupsShifter  ( GroupsShifter         ),
-  .ChainNum       ( ChainNum              ),
-  .ChunkLength    ( ChunkLength           ),
-  .TargetIn       ( TargetIn              ),
-  .HeaderBlobIn   ( HeaderBlobIn          ),
-  .NonceIn        ( NonceIn               ),
-  .NonceOut       ( NonceOut              ),
-  .HashCounterOut ( HashCounterOut        ),
-  .HashOut        ( HashOut               )
+  .ACLK          ( ap_clk                ),
+  .ARESET        ( 1'b0                  ),
+  .ACLK_EN       ( 1'b1                  ),
+  .AWVALID       ( s_axi_control_awvalid ),
+  .AWREADY       ( s_axi_control_awready ),
+  .AWADDR        ( s_axi_control_awaddr  ),
+  .WVALID        ( s_axi_control_wvalid  ),
+  .WREADY        ( s_axi_control_wready  ),
+  .WDATA         ( s_axi_control_wdata   ),
+  .WSTRB         ( s_axi_control_wstrb   ),
+  .ARVALID       ( s_axi_control_arvalid ),
+  .ARREADY       ( s_axi_control_arready ),
+  .ARADDR        ( s_axi_control_araddr  ),
+  .RVALID        ( s_axi_control_rvalid  ),
+  .RREADY        ( s_axi_control_rready  ),
+  .RDATA         ( s_axi_control_rdata   ),
+  .RRESP         ( s_axi_control_rresp   ),
+  .BVALID        ( s_axi_control_bvalid  ),
+  .BREADY        ( s_axi_control_bready  ),
+  .BRESP         ( s_axi_control_bresp   ),
+  .interrupt     ( interrupt             ),
+  .ap_start      ( ap_start              ),
+  .ap_done       ( ap_done               ),
+  .ap_ready      ( ap_ready              ),
+  .ap_idle       ( ap_idle               ),
+  .FromGroup     ( FromGroup             ),
+  .ToGroup       ( ToGroup               ),
+  .Groups        ( Groups                ),
+  .GroupsShifter ( GroupsShifter         ),
+  .ChainNum      ( ChainNum              ),
+  .ChunkLength   ( ChunkLength           ),
+  .MiningSteps   ( MiningSteps           ),
+  .TargetIn      ( TargetIn              ),
+  .HeaderBlobIn  ( HeaderBlobIn          ),
+  .NonceIn       ( NonceIn               ),
+  .Results       ( Results               )
 );
 
 ///////////////////////////////////////////////////////////////////////////////
-// AXIM ALEPHMINER
+// Add kernel logic here.  Modify/remove example code as necessary.
 ///////////////////////////////////////////////////////////////////////////////
 
-
+// Example RTL block.  Remove to insert custom logic.
 axim_alephminer #(
   .C_M00_AXI_ADDR_WIDTH ( C_M00_AXI_ADDR_WIDTH ),
   .C_M00_AXI_DATA_WIDTH ( C_M00_AXI_DATA_WIDTH ),
   .INST_NUM(INST_NUM)
-)
- axim_alephminer_i(
+)axim_alephminer_i (
   .ap_clk          ( ap_clk          ),
   .ap_rst_n        ( 1'b1            ),
   .m00_axi_awvalid ( m00_axi_awvalid ),
@@ -196,12 +193,11 @@ axim_alephminer #(
   .GroupsShifter   ( GroupsShifter   ),
   .ChainNum        ( ChainNum        ),
   .ChunkLength     ( ChunkLength     ),
+  .MiningSteps     (MiningSteps      ),
   .TargetIn        ( TargetIn        ),
   .HeaderBlobIn    ( HeaderBlobIn    ),
   .NonceIn         ( NonceIn         ),
-  .NonceOut        ( NonceOut        ),
-  .HashCounterOut  ( HashCounterOut  ),
-  .HashOut         ( HashOut         )
+  .Results         ( Results         )
 );
 
 endmodule

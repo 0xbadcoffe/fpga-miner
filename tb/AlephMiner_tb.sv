@@ -217,16 +217,7 @@ bit [63:0] NonceIn_ptr = 64'h0;
 
 ///////////////////////////////////////////////////////////////////////////
 // Pointer for interface : m00_axi
-bit [63:0] NonceOut_ptr = 64'h0;
-
-///////////////////////////////////////////////////////////////////////////
-// Pointer for interface : m00_axi
-bit [63:0] HashCounterOut_ptr = 64'h0;
-
-///////////////////////////////////////////////////////////////////////////
-// Pointer for interface : m00_axi
-bit [63:0] HashOut_ptr = 64'h0;
-
+bit [63:0] Results_ptr = 64'h0;
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // Backdoor fill the m00_axi memory.
 function void m00_axi_fill_memory(
@@ -488,6 +479,11 @@ task automatic check_scalar_registers(output bit error_found);
   check_register_value(32'h038, 16, tmp_error_found);
   error_found |= tmp_error_found;
 
+  ///////////////////////////////////////////////////////////////////////////
+  //Check ID 6: MiningSteps (0x040)
+  check_register_value(32'h040, 32, tmp_error_found);
+  error_found |= tmp_error_found;
+
 endtask
 
 task automatic set_scalar_registers();
@@ -516,6 +512,10 @@ task automatic set_scalar_registers();
   ///////////////////////////////////////////////////////////////////////////
   //Write ID 5: ChunkLength (0x038) -> 32'hffffffff (scalar)
   write_register(32'h038, 32'hffffffff);
+
+  ///////////////////////////////////////////////////////////////////////////
+  //Write ID 6: MiningSteps (0x040) -> 32'hffffffff (scalar)
+  write_register(32'h040, 32'hffffffff);
 
 endtask
 
@@ -546,6 +546,10 @@ task automatic write_scalar_registers();
   //Write ID 5: ChunkLength (0x038) -> 32'hffffffff (scalar)
   write_register(32'h038, 32'h00000146);
 
+  ///////////////////////////////////////////////////////////////////////////
+  //Write ID 6: MiningSteps (0x040) -> 32'hffffffff (scalar)
+  write_register(32'h040, 32'h00002710);
+
 endtask
 
 task automatic check_pointer_registers(output bit error_found);
@@ -555,63 +559,43 @@ task automatic check_pointer_registers(output bit error_found);
   $display("%t : Checking post reset values of pointer registers", $time);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 6: TargetIn (0x040)
-  check_register_value(32'h040, 32, tmp_error_found);
+  //Write ID 7: TargetIn (0x048)
+  check_register_value(32'h048, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 6: TargetIn (0x044)
-  check_register_value(32'h044, 32, tmp_error_found);
-  error_found |= tmp_error_found;
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 7: HeaderBlobIn (0x04c)
+  //Write ID 7: TargetIn (0x04c)
   check_register_value(32'h04c, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 7: HeaderBlobIn (0x050)
-  check_register_value(32'h050, 32, tmp_error_found);
+  //Write ID 8: HeaderBlobIn (0x054)
+  check_register_value(32'h054, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: NonceIn (0x058)
+  //Write ID 8: HeaderBlobIn (0x058)
   check_register_value(32'h058, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: NonceIn (0x05c)
-  check_register_value(32'h05c, 32, tmp_error_found);
+  //Write ID 9: NonceIn (0x060)
+  check_register_value(32'h060, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: NonceOut (0x064)
+  //Write ID 9: NonceIn (0x064)
   check_register_value(32'h064, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: NonceOut (0x068)
-  check_register_value(32'h068, 32, tmp_error_found);
+  //Write ID 10: Results (0x06c)
+  check_register_value(32'h06c, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: HashCounterOut (0x070)
+  //Write ID 10: Results (0x070)
   check_register_value(32'h070, 32, tmp_error_found);
-  error_found |= tmp_error_found;
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: HashCounterOut (0x074)
-  check_register_value(32'h074, 32, tmp_error_found);
-  error_found |= tmp_error_found;
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 11: HashOut (0x07c)
-  check_register_value(32'h07c, 32, tmp_error_found);
-  error_found |= tmp_error_found;
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 11: HashOut (0x080)
-  check_register_value(32'h080, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
 endtask
@@ -622,57 +606,39 @@ task automatic set_memory_pointers();
   TargetIn_ptr = get_random_ptr();
   HeaderBlobIn_ptr = get_random_ptr();
   NonceIn_ptr = get_random_ptr();
-  NonceOut_ptr = get_random_ptr();
-  HashCounterOut_ptr = get_random_ptr();
-  HashOut_ptr = get_random_ptr();
+  Results_ptr = get_random_ptr();
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 6: TargetIn (0x040) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h040, TargetIn_ptr[31:0]);
+  //Write ID 7: TargetIn (0x048) -> Randomized 4k aligned address (Global memory, lower 32 bits)
+  write_register(32'h048, TargetIn_ptr[31:0]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 6: TargetIn (0x044) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h044, TargetIn_ptr[63:32]);
+  //Write ID 7: TargetIn (0x04c) -> Randomized 4k aligned address (Global memory, upper 32 bits)
+  write_register(32'h04c, TargetIn_ptr[63:32]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 7: HeaderBlobIn (0x04c) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h04c, HeaderBlobIn_ptr[31:0]);
+  //Write ID 8: HeaderBlobIn (0x054) -> Randomized 4k aligned address (Global memory, lower 32 bits)
+  write_register(32'h054, HeaderBlobIn_ptr[31:0]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 7: HeaderBlobIn (0x050) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h050, HeaderBlobIn_ptr[63:32]);
+  //Write ID 8: HeaderBlobIn (0x058) -> Randomized 4k aligned address (Global memory, upper 32 bits)
+  write_register(32'h058, HeaderBlobIn_ptr[63:32]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: NonceIn (0x058) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h058, NonceIn_ptr[31:0]);
+  //Write ID 9: NonceIn (0x060) -> Randomized 4k aligned address (Global memory, lower 32 bits)
+  write_register(32'h060, NonceIn_ptr[31:0]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: NonceIn (0x05c) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h05c, NonceIn_ptr[63:32]);
+  //Write ID 9: NonceIn (0x064) -> Randomized 4k aligned address (Global memory, upper 32 bits)
+  write_register(32'h064, NonceIn_ptr[63:32]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: NonceOut (0x064) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h064, NonceOut_ptr[31:0]);
+  //Write ID 10: Results (0x06c) -> Randomized 4k aligned address (Global memory, lower 32 bits)
+  write_register(32'h06c, Results_ptr[31:0]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: NonceOut (0x068) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h068, NonceOut_ptr[63:32]);
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: HashCounterOut (0x070) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h070, HashCounterOut_ptr[31:0]);
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: HashCounterOut (0x074) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h074, HashCounterOut_ptr[63:32]);
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 11: HashOut (0x07c) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h07c, HashOut_ptr[31:0]);
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 11: HashOut (0x080) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h080, HashOut_ptr[63:32]);
+  //Write ID 10: Results (0x070) -> Randomized 4k aligned address (Global memory, upper 32 bits)
+  write_register(32'h070, Results_ptr[63:32]);
 
 endtask
 
@@ -774,15 +740,14 @@ function automatic bit check_kernel_result();
       slot = LP_MAX_LENGTH;
     end
   end
-  for (longint unsigned slot = 0; slot < 6; slot++) begin
-    ret_rd_value = m00_axi.mem_model.backdoor_memory_read_4byte(NonceOut_ptr + (slot * 4));
-    $display("Nonce %d 0x%x", slot, ret_rd_value);
-  end
-  ret_rd_value = m00_axi.mem_model.backdoor_memory_read_4byte(HashCounterOut_ptr);
-  $display("Hashcounter 0x%x", ret_rd_value);
-  for (longint unsigned slot = 0; slot < 8; slot++) begin
-    ret_rd_value = m00_axi.mem_model.backdoor_memory_read_4byte(HashOut_ptr + (slot * 4));
-    $display("Hash out %d 0x%x", slot, ret_rd_value);
+  for (longint unsigned slot = 0; slot < (6+1+8); slot++) begin
+    ret_rd_value = m00_axi.mem_model.backdoor_memory_read_4byte(Results_ptr + (slot * 4));
+    if(slot < 6)
+      $display("Nonce %d 0x%x", slot, ret_rd_value);
+    else if(slot < 7)
+      $display("Hashcounter 0x%x", ret_rd_value);
+    else
+      $display("Hash out %d 0x%x", slot, ret_rd_value);
   end
   
   error_counter = 0;
