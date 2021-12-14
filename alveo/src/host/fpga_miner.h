@@ -67,11 +67,9 @@ std::vector<cl_kernel> G_KRNLS(NCU);
 typedef struct miner_request_t {
   cl_event mEvent[3];
   int      mId;
-  cl_uint* NonceIn;
-  cl_uint* TargetIn;
-  cl_uint* HeaderBlobIn;
+  cl_uint* Data;
   cl_uint* Results;
-  cl_mem  mSrc[3];
+  cl_mem  mSrc[1];
   cl_mem  mDst[1];
 }miner_request_t;
 
@@ -81,9 +79,9 @@ void sync(miner_request_t *miner_req)
 	// Wait until the outputs have been read back
 	clWaitForEvents(1, &(miner_req->mEvent[2]));
 	printf("INFO: Releases events\n");
-	clReleaseEvent(miner_req->mEvent[0]);
-	clReleaseEvent(miner_req->mEvent[1]);
-	clReleaseEvent(miner_req->mEvent[2]);
+//	clReleaseEvent(miner_req->mEvent[0]);
+//	clReleaseEvent(miner_req->mEvent[1]);
+//	clReleaseEvent(miner_req->mEvent[2]);
 }
 
 
@@ -154,8 +152,8 @@ void event_cb(cl_event event, cl_int cmd_status, void *id);
 
 void copy_results(miner_request_t* miner_req) {
 
-	//printf("#%d thread has finished\n", miner_req->mId);
 	unsigned int mId = miner_req->mId;
+	//printf("#%d thread has finished\n", miner_req->mId);
 
 	for(cl_uint i = 0; i < (NONCE_LENGTH+1+TARGET_LENGTH); i++) {
 		if(i<NONCE_LENGTH) {
@@ -165,7 +163,9 @@ void copy_results(miner_request_t* miner_req) {
 			mining_workers[mId].nonce[i*4+3] = miner_req->Results[i] & 0xFF;
 			//printf("Nonce - array index %d output=0x%x\n", i,  miner_req->Results[i]);
 		} else if(i==NONCE_LENGTH) {
-			mining_workers[mId].hash_count=(uint32_t)miner_req->Results[i];
+			//memcpy(mining_workers[miner_req->mId].hash_count, *(uint32_t)(miner_req->Results[i]),1);
+			mining_workers[mId].hash_count=(uint32_t)(miner_req->Results[i]);
+			//printf("Hashcounter - output=0x%x\n",  mining_workers[miner_req->mId].hash_count);
 			//printf("Hashcounter - array index %d output=0x%x\n", i,  miner_req->Results[i]);
 		} else {
 			mining_workers[mId].hash[(i-(NONCE_LENGTH+1))*4] =   (miner_req->Results[i] >> 24) & 0xFF;
@@ -175,6 +175,9 @@ void copy_results(miner_request_t* miner_req) {
 			//printf("Hash - array index %d output=0x%x\n", i,  miner_req->Results[i]);
 		}
 	}
+	//printf("Hashcounter 0x%x\n",mining_workers[mId].hash_count);
+
+	//print_miner_worker_results(&mining_workers[mId]);
 
 	for(cl_uint i = 0; i < 3; i++) {
 		clReleaseMemObject(miner_req->mSrc[i]);
@@ -186,11 +189,11 @@ void copy_results(miner_request_t* miner_req) {
 		clReleaseEvent(miner_req->mEvent[i]);
 	}
 
-
+	//printf("Hashcounter 0x%x\n",mining_workers[mId].hash_count);
 	//checking the invalid bit
 	if((mining_workers[mId].hash_count & 0x80000000)==0) {
 		store_worker_found_good_hash(&mining_workers[mId], true);
-		//printf("Hashcounter - valid 0x%x\n",mining_workers[mId].hash_count);
+		//printf("Hashcounter - valid 0x%x\n",mining_workers[miner_req->mId].hash_count);
 	} else {
 		//removing the invalid bit from the hash count value
 		mining_workers[mId].hash_count = (mining_workers[mId].hash_count & 0x7FFFFFFF);
@@ -257,7 +260,9 @@ void AlephMinerOperator(
 
 
 		cl_mem_ext_ptr_t  mSrcExt[3];
-		cl_mem_ext_ptr_t  mDstExt[1];
+		cl_mem_ext_ptr_t  mDstExt[3];
+		cl_mem            mSrc[3];
+		cl_mem            mDst[3];
 		cl_int            mErr;
 
 		size_t global = 1;
@@ -273,62 +278,58 @@ void AlephMinerOperator(
 
 			unsigned char FromGroup = job->from_group;
 			unsigned char ToGroup = job->to_group;
-			unsigned char Groups = group_nums;
+			unsigned char Groups = (unsigned char)group_nums;
 			unsigned char GroupsShifter = (Groups/2);
-			unsigned char ChainNum = chain_nums;
-			unsigned short ChunkLength = CHUNK_LENGTH;
-			unsigned int MiningSteps = mining_steps;
+			unsigned char ChainNum = (unsigned char)chain_nums;
+			unsigned short ChunkLength = (unsigned short)CHUNK_LENGTH;
+			unsigned int MiningSteps = (unsigned int)mining_steps;
 
-			uint8_t data_var[4];
-			int8_t target_idx = 0;
+			int8_t target_idx = TARGET_LENGTH;
+			unsigned int headerblob_idx = 0;
+			int8_t nonce_idx = 0;
 
-			//printf("AlephMinerOperator %d\n", miner_req->mId);
+			//printf("AlephMinerOperator %d, mining steps %d\n", miner_req->mId,MiningSteps);
 
-
-			//req->HeaderBlobIn = &(unsigned int)header->blob;
-			//printf("     TARGET size %d\n", job->target.len);
-			// copying wih changing the order
-			for(cl_uint i = 0; i < TARGET_LENGTH; i++) {
-				for(cl_uint j = 0; j < 4; j++) {
-					target_idx = job->target.len-((i+1)*4)+j;
-					if(target_idx > 0) {
-						data_var[j] = job->target.blob[target_idx];
-					} else {
-						data_var[j] = 0;
+			for(cl_uint i = 0; i < (TARGET_LENGTH + INST_NUM * NONCE_LENGTH + HEADERBLOB_LENGTH); i++) {
+				//TargetIn
+				if(i < TARGET_LENGTH) {
+					for(cl_uint j = 0; j < 4; j++) {
+						miner_req->Data[i] = miner_req->Data[i] << 8;
+						if(target_idx > job->target.len) {
+							miner_req->Data[i] |= 0;
+						} else {
+							miner_req->Data[i] |= job->target.blob[i*4+j];
+						}
+						target_idx--;
 					}
-				}
-				miner_req->TargetIn[i] = conc(data_var);
-				//printf("TARGETIN - array index %d output=0x%x\n", i,  miner_req->TargetIn[i]);
-			}
-
-			// copying wih changing the order
-			for(cl_uint i = 0; i < NONCE_LENGTH; i++) {
-				for(cl_uint j = 0; j < 4; j++) {
-					data_var[j] = work->nonce[20-(i*4)+j];
-				}
-				for(cl_uint k = 0; k < INST_NUM; k++) {
-					if(i==0){
-						miner_req->NonceIn[k*NONCE_LENGTH+i] = conc(data_var)+ (NONCE_DIFF*k);
-					} else {
-						miner_req->NonceIn[k*NONCE_LENGTH+i] = conc(data_var);
+					//printf("TARGETIN - array index %d output=0x%x\n", i,  miner_req->Data[i]);
+				//NonceIn
+				} else if(i < (TARGET_LENGTH + INST_NUM * NONCE_LENGTH)) {
+					if(nonce_idx==NONCE_LENGTH) {
+						nonce_idx = 0;
 					}
-					//printf("NONCEIN - array index %d output=0x%x\n", k*NONCE_LENGTH+i,  miner_req->NonceIn[k*NONCE_LENGTH+i]);
-				}
-				//printf("NONCEIN - array index %d output=0x%x\n", i,  miner_req->NonceIn[i]);
-			}
-
-
-
-			for(cl_uint i = 0; i < HEADERBLOB_LENGTH; i++) {
-				miner_req->HeaderBlobIn[i] = 0;
-				for(cl_uint j = 0; j < 4; j++) {
-					if(i==(HEADERBLOB_LENGTH-1) && j >1) {
-						miner_req->HeaderBlobIn[i] |= 0 << ((j)*8);
-					} else {
-						miner_req->HeaderBlobIn[i] |= (cl_uint)header->blob[i*4+j] << ((j)*8);
+					for(cl_uint j = 0; j < 4; j++) {
+						miner_req->Data[i] = miner_req->Data[i] << 8;
+						miner_req->Data[i] |= work->nonce[nonce_idx*4+j];
 					}
+					if(i==((TARGET_LENGTH + INST_NUM * NONCE_LENGTH)-1)) {
+						miner_req->Data[i] += NONCE_DIFF;
+					}
+					nonce_idx++;
+					//printf("NONCEIN - array index %d output=0x%x\n", i,  miner_req->Data[i]);
+				//HeaderBlobIn
+				} else {
+					headerblob_idx = i - (TARGET_LENGTH + INST_NUM * NONCE_LENGTH);
+					miner_req->Data[i] = 0;
+					for(cl_uint j = 0; j < 4; j++) {
+						if(i==((TARGET_LENGTH + INST_NUM * NONCE_LENGTH + HEADERBLOB_LENGTH)-1) && j >1) {
+							miner_req->Data[i] |= 0 << ((j)*8);
+						} else {
+							miner_req->Data[i] |= (cl_uint)header->blob[headerblob_idx*4+j] << ((j)*8);
+						}
+					}
+					//printf("HEADERBLOBIN - array index %d output=0x%x\n", i,  miner_req->Data[i]);
 				}
-				//printf("HEADERBLOBIN - array index %d output=0x%x\n", i,  miner_req->HeaderBlobIn[i]);
 			}
 
 
@@ -336,31 +337,12 @@ void AlephMinerOperator(
 	//mSrcExt[0].flags = membank | XCL_MEM_TOPOLOGY;
 	//mSrcExt[0].param = 0;
 	//mSrcExt[0].obj   = miner_req->TargetIn;
-	miner_req->mSrc[0] = clCreateBuffer(queue_s.mContext, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,  sizeof(unsigned int) * TARGET_LENGTH, miner_req->TargetIn, &mErr);
+	miner_req->mSrc[0] = clCreateBuffer(queue_s.mContext, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,  sizeof(unsigned int) * (TARGET_LENGTH + NONCE_LENGTH * INST_NUM + HEADERBLOB_LENGTH), miner_req->Data, &mErr);
 	//G_TARGET[miner_req->mId] = clCreateBuffer(queue_s.mContext, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,  sizeof(unsigned int) * TARGET_LENGTH, miner_req->TargetIn, &mErr);
     if (mErr != CL_SUCCESS) {
       printf("Return code for clCreateBuffer on mTargetIn: 0x%x\n",  mErr);
     }
 
-    // Create input buffers for Headerblob (host to device)
-	//mSrcExt[1].flags = membank | XCL_MEM_TOPOLOGY;
-	//mSrcExt[1].param = 0;
-	//mSrcExt[1].obj   = miner_req->HeaderBlobIn;
-    miner_req->mSrc[1] = clCreateBuffer(queue_s.mContext,   CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,  sizeof(unsigned int) * HEADERBLOB_LENGTH, miner_req->HeaderBlobIn, &mErr);
-    //G_HEADERBLOB[miner_req->mId] = clCreateBuffer(queue_s.mContext, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,  sizeof(unsigned int) * HEADERBLOB_LENGTH, miner_req->HeaderBlobIn, &mErr);
-    if (mErr != CL_SUCCESS) {
-    	printf("Return code for clCreateBuffer on mHeaderBlobIn: 0x%x\n",  mErr);
-    }
-
-    // Create input/output buffers for Nonce
-	//mSrcExt[2].flags = membank | XCL_MEM_TOPOLOGY;
-	//mSrcExt[2].param = 0;
-	//mSrcExt[2].obj   = miner_req->NonceIn;
-    miner_req->mSrc[2] = clCreateBuffer(queue_s.mContext,   CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, (sizeof(unsigned int) * NONCE_LENGTH * INST_NUM), miner_req->NonceIn, &mErr);
-    //G_NONCEIN[miner_req->mId] = clCreateBuffer(queue_s.mContext, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,  (sizeof(unsigned int) * NONCE_LENGTH * INST_NUM), miner_req->NonceIn, &mErr);
-    if (mErr != CL_SUCCESS) {
-    	printf("Return code for clCreateBuffer on NonceIn: 0x%x\n",  mErr);
-    }
 
     //printf("mDst of thread #%d\n",miner_req->mId);
 
@@ -373,6 +355,7 @@ void AlephMinerOperator(
     if (mErr != CL_SUCCESS) {
     	printf("Return code for clCreateBuffer on Results: 0x%x\n",  mErr);
     }
+
 
 
 
@@ -394,9 +377,9 @@ void AlephMinerOperator(
     mErr |= clSetKernelArg(mKernel, 5, sizeof(unsigned short), &ChunkLength);
     mErr |= clSetKernelArg(mKernel, 6, sizeof(unsigned int), &MiningSteps);
     mErr |= clSetKernelArg(mKernel, 7, sizeof(cl_mem),  &miner_req->mSrc[0]);
-    mErr |= clSetKernelArg(mKernel, 8, sizeof(cl_mem),  &miner_req->mSrc[1]);
-    mErr |= clSetKernelArg(mKernel, 9, sizeof(cl_mem),  &miner_req->mSrc[2]);
-    mErr |= clSetKernelArg(mKernel, 10, sizeof(cl_mem),  &miner_req->mDst[0]);
+    mErr |= clSetKernelArg(mKernel, 8, sizeof(cl_mem),  &miner_req->mDst[0]);
+
+    //printf("End the arguments of thread #%d\n",miner_req->mId);
 
 
 
@@ -408,8 +391,9 @@ void AlephMinerOperator(
     //uv_mutex_lock(&G_MUTEX);
 
 	// Schedule the writing of the inputs
-	mErr |= clEnqueueMigrateMemObjects(queue_s.mQueue, 3,miner_req->mSrc, 0, 0, nullptr,  &miner_req->mEvent[0]);
+	mErr |= clEnqueueMigrateMemObjects(queue_s.mQueue, 1,miner_req->mSrc, 0, 0, nullptr,  &miner_req->mEvent[0]);
 
+	//printf("MigrateMemObjects inputs #%d\n",miner_req->mId);
 
 	if (mErr != CL_SUCCESS) {
       printf("ERROR: Failed to write to target source array: %d!\n", mErr);
@@ -429,6 +413,8 @@ void AlephMinerOperator(
 	}
 
 	mErr = 0;
+
+	//printf("MigrateMemObjects output #%d\n",miner_req->mId);
 
 
 	mErr |= clEnqueueMigrateMemObjects(queue_s.mQueue, 1, miner_req->mDst, CL_MIGRATE_MEM_OBJECT_HOST, 1, &miner_req->mEvent[1], &miner_req->mEvent[2]);
@@ -453,6 +439,7 @@ void AlephMinerReleaser(queue_t queue_s)
 		clReleaseKernel(G_KRNLS[i]);
 	}
   }
+
 
 
 
@@ -590,9 +577,7 @@ int configure_board(device_config_t *dev_conf,  char** argv)
 
 void free_buffers(miner_request_t* miner_req)
 {
-	free(miner_req->NonceIn      );
-    free(miner_req->TargetIn    );
-    free(miner_req->HeaderBlobIn );
+	free(miner_req->Data      );
     free(miner_req->Results    );
 
 }
