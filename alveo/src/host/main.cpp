@@ -404,9 +404,7 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < parallel_mining_works; i++)
     {
-    	G_MINER_REQS[i].TargetIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,TARGET_LENGTH * sizeof(cl_uint*));
-    	G_MINER_REQS[i].HeaderBlobIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,HEADERBLOB_LENGTH * sizeof(cl_uint*));
-    	G_MINER_REQS[i].NonceIn = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,NONCE_LENGTH*INST_NUM * sizeof(cl_uint*));
+    	G_MINER_REQS[i].Data = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,(TARGET_LENGTH+NONCE_LENGTH*INST_NUM+HEADERBLOB_LENGTH) * sizeof(cl_uint*));
     	G_MINER_REQS[i].Results = (cl_uint*)aligned_alloc(MEM_ALIGNMENT,(NONCE_LENGTH+1+TARGET_LENGTH) * sizeof(cl_uint*));
         uv_async_init(loop, &(mining_workers[i].async), mine_with_async);
         uv_timer_init(loop, &(mining_workers[i].timer));
