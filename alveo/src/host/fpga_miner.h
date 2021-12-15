@@ -179,10 +179,7 @@ void copy_results(miner_request_t* miner_req) {
 
 	//print_miner_worker_results(&mining_workers[mId]);
 
-	for(cl_uint i = 0; i < 3; i++) {
-		clReleaseMemObject(miner_req->mSrc[i]);
-	}
-
+	clReleaseMemObject(miner_req->mSrc[0]);
 	clReleaseMemObject(miner_req->mDst[0]);
 
 	for(cl_uint i = 0; i < 3; i++) {
@@ -284,7 +281,7 @@ void AlephMinerOperator(
 			unsigned short ChunkLength = (unsigned short)CHUNK_LENGTH;
 			unsigned int MiningSteps = (unsigned int)mining_steps;
 
-			int8_t target_idx = TARGET_LENGTH;
+			int8_t target_idx = (TARGET_LENGTH*4);
 			unsigned int headerblob_idx = 0;
 			int8_t nonce_idx = 0;
 
@@ -298,7 +295,7 @@ void AlephMinerOperator(
 						if(target_idx > job->target.len) {
 							miner_req->Data[i] |= 0;
 						} else {
-							miner_req->Data[i] |= job->target.blob[i*4+j];
+							miner_req->Data[i] |= job->target.blob[(job->target.len)-target_idx];
 						}
 						target_idx--;
 					}
@@ -391,7 +388,7 @@ void AlephMinerOperator(
     //uv_mutex_lock(&G_MUTEX);
 
 	// Schedule the writing of the inputs
-	mErr |= clEnqueueMigrateMemObjects(queue_s.mQueue, 1,miner_req->mSrc, 0, 0, nullptr,  &miner_req->mEvent[0]);
+	mErr |= clEnqueueMigrateMemObjects(queue_s.mQueue, 1, miner_req->mSrc, 0, 0, nullptr,  &miner_req->mEvent[0]);
 
 	//printf("MigrateMemObjects inputs #%d\n",miner_req->mId);
 
