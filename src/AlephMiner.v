@@ -13,6 +13,7 @@ module AlephMiner #(
 (
   // System Signals
   input  wire                                    ap_clk               ,
+  input  wire                                    ap_clk_2             ,
   //  Note: A minimum subset of AXI4 memory mapped signals are declared.  AXI
   // signals omitted from these interfaces are automatically inferred with the
   // optimal values for Xilinx accleration platforms.  This allows Xilinx AXI4 Interconnects
@@ -98,9 +99,7 @@ wire [8-1:0]                        GroupsShifter                 ;
 wire [8-1:0]                        ChainNum                      ;
 wire [16-1:0]                       ChunkLength                   ;
 wire [32-1:0]                       MiningSteps                   ;
-wire [64-1:0]                       TargetIn                      ;
-wire [64-1:0]                       HeaderBlobIn                  ;
-wire [64-1:0]                       NonceIn                       ;
+wire [64-1:0]                       Data                          ;
 wire [64-1:0]                       Results                       ;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -146,17 +145,15 @@ inst_control_s_axi (
   .ChainNum      ( ChainNum              ),
   .ChunkLength   ( ChunkLength           ),
   .MiningSteps   ( MiningSteps           ),
-  .TargetIn      ( TargetIn              ),
-  .HeaderBlobIn  ( HeaderBlobIn          ),
-  .NonceIn       ( NonceIn               ),
+  .Data          ( Data                  ),
   .Results       ( Results               )
 );
 
+
 ///////////////////////////////////////////////////////////////////////////////
-// Add kernel logic here.  Modify/remove example code as necessary.
+// Axim AlephMiner 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Example RTL block.  Remove to insert custom logic.
 axim_alephminer #(
   .C_M00_AXI_ADDR_WIDTH ( C_M00_AXI_ADDR_WIDTH ),
   .C_M00_AXI_DATA_WIDTH ( C_M00_AXI_DATA_WIDTH ),
@@ -164,6 +161,8 @@ axim_alephminer #(
 )axim_alephminer_i (
   .ap_clk          ( ap_clk          ),
   .ap_rst_n        ( 1'b1            ),
+  .ap_clk_2        ( ap_clk_2        ),
+  .ap_rst_n_2      ( 1'b1            ),
   .m00_axi_awvalid ( m00_axi_awvalid ),
   .m00_axi_awready ( m00_axi_awready ),
   .m00_axi_awaddr  ( m00_axi_awaddr  ),
@@ -194,11 +193,11 @@ axim_alephminer #(
   .ChainNum        ( ChainNum        ),
   .ChunkLength     ( ChunkLength     ),
   .MiningSteps     (MiningSteps      ),
-  .TargetIn        ( TargetIn        ),
-  .HeaderBlobIn    ( HeaderBlobIn    ),
-  .NonceIn         ( NonceIn         ),
+  .Data            ( Data            ),
   .Results         ( Results         )
 );
 
+
 endmodule
 `default_nettype wire
+

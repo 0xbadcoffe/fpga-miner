@@ -36,9 +36,7 @@ module AlephMiner_control_s_axi
     output wire [7:0]                    ChainNum,
     output wire [15:0]                   ChunkLength,
     output wire [31:0]                   MiningSteps,
-    output wire [63:0]                   TargetIn,
-    output wire [63:0]                   HeaderBlobIn,
-    output wire [63:0]                   NonceIn,
+    output wire [63:0]                   Data,
     output wire [63:0]                   Results,
     output wire                          ap_start,
     input  wire                          ap_done,
@@ -91,26 +89,16 @@ module AlephMiner_control_s_axi
 // 0x40 : Data signal of MiningSteps
 //        bit 31~0 - MiningSteps[31:0] (Read/Write)
 // 0x44 : reserved
-// 0x48 : Data signal of TargetIn
-//        bit 31~0 - TargetIn[31:0] (Read/Write)
-// 0x4c : Data signal of TargetIn
-//        bit 31~0 - TargetIn[63:32] (Read/Write)
+// 0x48 : Data signal of Data
+//        bit 31~0 - Data[31:0] (Read/Write)
+// 0x4c : Data signal of Data
+//        bit 31~0 - Data[63:32] (Read/Write)
 // 0x50 : reserved
-// 0x54 : Data signal of HeaderBlobIn
-//        bit 31~0 - HeaderBlobIn[31:0] (Read/Write)
-// 0x58 : Data signal of HeaderBlobIn
-//        bit 31~0 - HeaderBlobIn[63:32] (Read/Write)
-// 0x5c : reserved
-// 0x60 : Data signal of NonceIn
-//        bit 31~0 - NonceIn[31:0] (Read/Write)
-// 0x64 : Data signal of NonceIn
-//        bit 31~0 - NonceIn[63:32] (Read/Write)
-// 0x68 : reserved
-// 0x6c : Data signal of Results
+// 0x54 : Data signal of Results
 //        bit 31~0 - Results[31:0] (Read/Write)
-// 0x70 : Data signal of Results
+// 0x58 : Data signal of Results
 //        bit 31~0 - Results[63:32] (Read/Write)
-// 0x74 : reserved
+// 0x5c : reserved
 // (SC = Self Clear, COR = Clear on Read, TOW = Toggle on Write, COH = Clear on Handshake)
 
 //------------------------Parameter----------------------
@@ -133,18 +121,12 @@ localparam
     ADDR_CHUNKLENGTH_CTRL     = 7'h3c,
     ADDR_MININGSTEPS_DATA_0   = 7'h40,
     ADDR_MININGSTEPS_CTRL     = 7'h44,
-    ADDR_TARGETIN_DATA_0      = 7'h48,
-    ADDR_TARGETIN_DATA_1      = 7'h4c,
-    ADDR_TARGETIN_CTRL        = 7'h50,
-    ADDR_HEADERBLOBIN_DATA_0  = 7'h54,
-    ADDR_HEADERBLOBIN_DATA_1  = 7'h58,
-    ADDR_HEADERBLOBIN_CTRL    = 7'h5c,
-    ADDR_NONCEIN_DATA_0       = 7'h60,
-    ADDR_NONCEIN_DATA_1       = 7'h64,
-    ADDR_NONCEIN_CTRL         = 7'h68,
-    ADDR_RESULTS_DATA_0       = 7'h6c,
-    ADDR_RESULTS_DATA_1       = 7'h70,
-    ADDR_RESULTS_CTRL         = 7'h74,
+    ADDR_DATA_DATA_0          = 7'h48,
+    ADDR_DATA_DATA_1          = 7'h4c,
+    ADDR_DATA_CTRL            = 7'h50,
+    ADDR_RESULTS_DATA_0       = 7'h54,
+    ADDR_RESULTS_DATA_1       = 7'h58,
+    ADDR_RESULTS_CTRL         = 7'h5c,
     WRIDLE                    = 2'd0,
     WRDATA                    = 2'd1,
     WRRESP                    = 2'd2,
@@ -187,9 +169,7 @@ localparam
     reg  [7:0]                    int_ChainNum = 'b0;
     reg  [15:0]                   int_ChunkLength = 'b0;
     reg  [31:0]                   int_MiningSteps = 'b0;
-    reg  [63:0]                   int_TargetIn = 'b0;
-    reg  [63:0]                   int_HeaderBlobIn = 'b0;
-    reg  [63:0]                   int_NonceIn = 'b0;
+    reg  [63:0]                   int_Data = 'b0;
     reg  [63:0]                   int_Results = 'b0;
 
 //------------------------Instantiation------------------
@@ -320,23 +300,11 @@ always @(posedge ACLK) begin
                 ADDR_MININGSTEPS_DATA_0: begin
                     rdata <= int_MiningSteps[31:0];
                 end
-                ADDR_TARGETIN_DATA_0: begin
-                    rdata <= int_TargetIn[31:0];
+                ADDR_DATA_DATA_0: begin
+                    rdata <= int_Data[31:0];
                 end
-                ADDR_TARGETIN_DATA_1: begin
-                    rdata <= int_TargetIn[63:32];
-                end
-                ADDR_HEADERBLOBIN_DATA_0: begin
-                    rdata <= int_HeaderBlobIn[31:0];
-                end
-                ADDR_HEADERBLOBIN_DATA_1: begin
-                    rdata <= int_HeaderBlobIn[63:32];
-                end
-                ADDR_NONCEIN_DATA_0: begin
-                    rdata <= int_NonceIn[31:0];
-                end
-                ADDR_NONCEIN_DATA_1: begin
-                    rdata <= int_NonceIn[63:32];
+                ADDR_DATA_DATA_1: begin
+                    rdata <= int_Data[63:32];
                 end
                 ADDR_RESULTS_DATA_0: begin
                     rdata <= int_Results[31:0];
@@ -363,9 +331,7 @@ assign GroupsShifter     = int_GroupsShifter;
 assign ChainNum          = int_ChainNum;
 assign ChunkLength       = int_ChunkLength;
 assign MiningSteps       = int_MiningSteps;
-assign TargetIn          = int_TargetIn;
-assign HeaderBlobIn      = int_HeaderBlobIn;
-assign NonceIn           = int_NonceIn;
+assign Data              = int_Data;
 assign Results           = int_Results;
 // int_ap_start
 always @(posedge ACLK) begin
@@ -557,63 +523,23 @@ always @(posedge ACLK) begin
     end
 end
 
-// int_TargetIn[31:0]
+// int_Data[31:0]
 always @(posedge ACLK) begin
     if (ARESET)
-        int_TargetIn[31:0] <= 0;
+        int_Data[31:0] <= 0;
     else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_TARGETIN_DATA_0)
-            int_TargetIn[31:0] <= (WDATA[31:0] & wmask) | (int_TargetIn[31:0] & ~wmask);
+        if (w_hs && waddr == ADDR_DATA_DATA_0)
+            int_Data[31:0] <= (WDATA[31:0] & wmask) | (int_Data[31:0] & ~wmask);
     end
 end
 
-// int_TargetIn[63:32]
+// int_Data[63:32]
 always @(posedge ACLK) begin
     if (ARESET)
-        int_TargetIn[63:32] <= 0;
+        int_Data[63:32] <= 0;
     else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_TARGETIN_DATA_1)
-            int_TargetIn[63:32] <= (WDATA[31:0] & wmask) | (int_TargetIn[63:32] & ~wmask);
-    end
-end
-
-// int_HeaderBlobIn[31:0]
-always @(posedge ACLK) begin
-    if (ARESET)
-        int_HeaderBlobIn[31:0] <= 0;
-    else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_HEADERBLOBIN_DATA_0)
-            int_HeaderBlobIn[31:0] <= (WDATA[31:0] & wmask) | (int_HeaderBlobIn[31:0] & ~wmask);
-    end
-end
-
-// int_HeaderBlobIn[63:32]
-always @(posedge ACLK) begin
-    if (ARESET)
-        int_HeaderBlobIn[63:32] <= 0;
-    else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_HEADERBLOBIN_DATA_1)
-            int_HeaderBlobIn[63:32] <= (WDATA[31:0] & wmask) | (int_HeaderBlobIn[63:32] & ~wmask);
-    end
-end
-
-// int_NonceIn[31:0]
-always @(posedge ACLK) begin
-    if (ARESET)
-        int_NonceIn[31:0] <= 0;
-    else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_NONCEIN_DATA_0)
-            int_NonceIn[31:0] <= (WDATA[31:0] & wmask) | (int_NonceIn[31:0] & ~wmask);
-    end
-end
-
-// int_NonceIn[63:32]
-always @(posedge ACLK) begin
-    if (ARESET)
-        int_NonceIn[63:32] <= 0;
-    else if (ACLK_EN) begin
-        if (w_hs && waddr == ADDR_NONCEIN_DATA_1)
-            int_NonceIn[63:32] <= (WDATA[31:0] & wmask) | (int_NonceIn[63:32] & ~wmask);
+        if (w_hs && waddr == ADDR_DATA_DATA_1)
+            int_Data[63:32] <= (WDATA[31:0] & wmask) | (int_Data[63:32] & ~wmask);
     end
 end
 

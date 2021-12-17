@@ -35,13 +35,15 @@ parameter KRNL_ISR_REG_ADDR      = 32'h0000000c;
 parameter ISR_DONE_MASK          = 32'h00000001;
 parameter ISR_READY_MASK         = 32'h00000002;
 
-parameter integer  LP_INST_NUM             = 4;  
+parameter integer  LP_INST_NUM             = 2;  
 
 parameter integer  LP_TARGET_BYTES         = 32;
 parameter integer  LP_NONCE_BYTES          = 24;
 parameter integer  LP_HEADERBLOB_BYTES     = 304;
 
 parameter integer  LP_ALL_NONCE_BYTES      = (LP_NONCE_BYTES*LP_INST_NUM);
+
+parameter integer LP_DATA_BYTES = LP_TARGET_BYTES + LP_ALL_NONCE_BYTES + LP_HEADERBLOB_BYTES;
 
 parameter integer LP_CLK_PERIOD_PS = 4000; // 250 MHz
 
@@ -51,6 +53,16 @@ logic ap_clk = 0;
 initial begin: AP_CLK
   forever begin
     ap_clk = #(LP_CLK_PERIOD_PS/2) ~ap_clk;
+  end
+end
+
+parameter integer LP_CLK2_PERIOD_PS = 2000; // 500 MHz
+
+logic ap_clk_2 = 0;
+
+initial begin: AP_CLK_2
+  forever begin
+    ap_clk_2 = #(LP_CLK2_PERIOD_PS/2) ~ap_clk_2;
   end
 end
 //AXI4 master interface m00_axi
@@ -107,6 +119,7 @@ AlephMiner #(
 )
 inst_dut (
   .ap_clk                ( ap_clk                ),
+  .ap_clk_2              ( ap_clk_2              ),
   .m00_axi_awvalid       ( m00_axi_awvalid       ),
   .m00_axi_awready       ( m00_axi_awready       ),
   .m00_axi_awaddr        ( m00_axi_awaddr        ),
@@ -205,15 +218,7 @@ bit               error_found = 0;
 
 ///////////////////////////////////////////////////////////////////////////
 // Pointer for interface : m00_axi
-bit [63:0] TargetIn_ptr = 64'h0;
-
-///////////////////////////////////////////////////////////////////////////
-// Pointer for interface : m00_axi
-bit [63:0] HeaderBlobIn_ptr = 64'h0;
-
-///////////////////////////////////////////////////////////////////////////
-// Pointer for interface : m00_axi
-bit [63:0] NonceIn_ptr = 64'h0;
+bit [63:0] Data_ptr = 64'h0;
 
 ///////////////////////////////////////////////////////////////////////////
 // Pointer for interface : m00_axi
@@ -559,43 +564,23 @@ task automatic check_pointer_registers(output bit error_found);
   $display("%t : Checking post reset values of pointer registers", $time);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 7: TargetIn (0x048)
+  //Write ID 7: Data (0x048)
   check_register_value(32'h048, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 7: TargetIn (0x04c)
+  //Write ID 7: Data (0x04c)
   check_register_value(32'h04c, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: HeaderBlobIn (0x054)
+  //Write ID 8: Results (0x054)
   check_register_value(32'h054, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: HeaderBlobIn (0x058)
+  //Write ID 8: Results (0x058)
   check_register_value(32'h058, 32, tmp_error_found);
-  error_found |= tmp_error_found;
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: NonceIn (0x060)
-  check_register_value(32'h060, 32, tmp_error_found);
-  error_found |= tmp_error_found;
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: NonceIn (0x064)
-  check_register_value(32'h064, 32, tmp_error_found);
-  error_found |= tmp_error_found;
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: Results (0x06c)
-  check_register_value(32'h06c, 32, tmp_error_found);
-  error_found |= tmp_error_found;
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: Results (0x070)
-  check_register_value(32'h070, 32, tmp_error_found);
   error_found |= tmp_error_found;
 
 endtask
@@ -603,112 +588,97 @@ endtask
 task automatic set_memory_pointers();
   ///////////////////////////////////////////////////////////////////////////
   //Randomly generate memory pointers.
-  TargetIn_ptr = get_random_ptr();
-  HeaderBlobIn_ptr = get_random_ptr();
-  NonceIn_ptr = get_random_ptr();
+  Data_ptr = get_random_ptr();
   Results_ptr = get_random_ptr();
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 7: TargetIn (0x048) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h048, TargetIn_ptr[31:0]);
+  //Write ID 7: Data (0x048) -> Randomized 4k aligned address (Global memory, lower 32 bits)
+  write_register(32'h048, Data_ptr[31:0]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 7: TargetIn (0x04c) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h04c, TargetIn_ptr[63:32]);
+  //Write ID 7: Data (0x04c) -> Randomized 4k aligned address (Global memory, upper 32 bits)
+  write_register(32'h04c, Data_ptr[63:32]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: HeaderBlobIn (0x054) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h054, HeaderBlobIn_ptr[31:0]);
+  //Write ID 8: Results (0x054) -> Randomized 4k aligned address (Global memory, lower 32 bits)
+  write_register(32'h054, Results_ptr[31:0]);
 
   ///////////////////////////////////////////////////////////////////////////
-  //Write ID 8: HeaderBlobIn (0x058) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h058, HeaderBlobIn_ptr[63:32]);
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: NonceIn (0x060) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h060, NonceIn_ptr[31:0]);
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 9: NonceIn (0x064) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h064, NonceIn_ptr[63:32]);
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: Results (0x06c) -> Randomized 4k aligned address (Global memory, lower 32 bits)
-  write_register(32'h06c, Results_ptr[31:0]);
-
-  ///////////////////////////////////////////////////////////////////////////
-  //Write ID 10: Results (0x070) -> Randomized 4k aligned address (Global memory, upper 32 bits)
-  write_register(32'h070, Results_ptr[63:32]);
+  //Write ID 8: Results (0x058) -> Randomized 4k aligned address (Global memory, upper 32 bits)
+  write_register(32'h058, Results_ptr[63:32]);
 
 endtask
 
 task automatic backdoor_fill_memories(integer unsigned iter);
 
-  target[0] = 32'hffffffff;
+  target[0] = 32'h0000ffff;
   target[1] = 32'hffffffff;
   target[2] = 32'hffffffff;
   target[3] = 32'hffffffff;
   target[4] = 32'hffffffff;
   target[5] = 32'hffffffff;
   target[6] = 32'hffffffff;
-  target[7] = 32'h000fffff;
+  target[7] = 32'hffffffff;
   if(iter==1)
-    target[7] = 32'h0fffffff;
+    target[0] = 32'h0fffffff;
+  else if(iter==2)
+    target[0] = 32'h0e2fffff;
 
-  nonce[0] = 32'h14151617;
-  nonce[1] = 32'h10111213;
-  nonce[2] = 32'h0C0D0E0F;
-  nonce[3] = 32'h08090A0B;
-  nonce[4] = 32'h04050607;
-  nonce[5] = 32'h00010203;
+  nonce[5] = 32'h14151617;
+  nonce[4] = 32'h10111213;
+  nonce[3] = 32'h0C0D0E0F;
+  nonce[2] = 32'h08090A0B;
+  nonce[1] = 32'h04050607;
+  nonce[0] = 32'h00010203;
 
-  nonce[6] = 32'h14152617;
-  nonce[7] = 32'h10111213;
-  nonce[8] = 32'h0C0D0E0F;
-  nonce[9] = 32'h08090A0B;
-  nonce[10] = 32'h04050607;
-  nonce[11] = 32'h00010203;
+  nonce[11] = 32'h14152617;
+  nonce[10] = 32'h10111213;
+  nonce[9] = 32'h0C0D0E0F;
+  nonce[8] = 32'h08090A0B;
+  nonce[7] = 32'h04050607;
+  nonce[6] = 32'h00010203;
 
-  nonce[12] = 32'h14153617;
-  nonce[13] = 32'h10111213;
-  nonce[14] = 32'h0C0D0E0F;
-  nonce[15] = 32'h08090A0B;
-  nonce[16] = 32'h04050607;
-  nonce[17] = 32'h00010203;
+  nonce[17] = 32'h14153617;
+  nonce[16] = 32'h10111213;
+  nonce[15] = 32'h0C0D0E0F;
+  nonce[14] = 32'h08090A0B;
+  nonce[13] = 32'h04050607;
+  nonce[12] = 32'h00010203;
 
-  nonce[18] = 32'h14154617;
-  nonce[19] = 32'h10111213;
-  nonce[20] = 32'h0C0D0E0F;
-  nonce[21] = 32'h08090A0B;
-  nonce[22] = 32'h04050607;
-  nonce[23] = 32'h00010203;
+  nonce[23] = 32'h14154617;
+  nonce[22] = 32'h10111213;
+  nonce[21] = 32'h0C0D0E0F;
+  nonce[20] = 32'h08090A0B;
+  nonce[19] = 32'h04050607;
+  nonce[18] = 32'h00010203;
 
   /////////////////////////////////////////////////////////////////////////////////////////////////
   // Backdoor fill the memory with the content.
-  for (longint unsigned slot = 0; slot < LP_TARGET_BYTES/4; slot++) begin
-    m00_axi.mem_model.backdoor_memory_write_4byte(TargetIn_ptr + (slot * 4), target[slot]);
-  end
-  for (longint unsigned slot = 0; slot < LP_ALL_NONCE_BYTES/4; slot++) begin
-    m00_axi.mem_model.backdoor_memory_write_4byte(NonceIn_ptr + (slot * 4), nonce[slot]);
-  end
-  
   data_byte = 8'h18;
-  for (longint unsigned slot = 0; slot < LP_HEADERBLOB_BYTES/4; slot++) begin
-    data[7:0] =    data_byte;
-    data[15:8] =  (data_byte < 250) ? data_byte + 1 : 0;
-    if(slot==LP_HEADERBLOB_BYTES/4-1) begin
-        data[31:16] = 0;
-    end
+  
+  for (longint unsigned slot = 0; slot < (LP_DATA_BYTES)/4; slot++) begin
+    if(slot < (LP_TARGET_BYTES/4))
+        m00_axi.mem_model.backdoor_memory_write_4byte(Data_ptr + (slot * 4), target[slot]);
+    else if(slot < ((LP_TARGET_BYTES+LP_ALL_NONCE_BYTES)/4))
+        m00_axi.mem_model.backdoor_memory_write_4byte(Data_ptr + (slot * 4), nonce[slot-(LP_TARGET_BYTES/4)]);
     else begin
-        data[23:16] = (data_byte < 249) ? data_byte + 2 : data_byte%249;
-        data[31:24] = (data_byte < 248) ? data_byte + 3 : data_byte%248;
+        data[7:0] =    data_byte;
+        data[15:8] =  (data_byte < 250) ? data_byte + 1 : 0;
+        if(slot==((LP_DATA_BYTES/4)-1)) begin
+            data[31:16] = 0;
+        end
+        else begin
+            data[23:16] = (data_byte < 249) ? data_byte + 2 : data_byte%249;
+            data[31:24] = (data_byte < 248) ? data_byte + 3 : data_byte%248;
+        end
+        //$display("Data %d 0x%x", slot, data);
+        m00_axi.mem_model.backdoor_memory_write_4byte(Data_ptr + (slot * 4), data);
+        if(data_byte < 247)
+            data_byte = data_byte + 4;
+        else
+            data_byte = data_byte%247;
     end
-    m00_axi.mem_model.backdoor_memory_write_4byte(HeaderBlobIn_ptr + (slot * 4), data);
-    if(data_byte < 247)
-      data_byte = data_byte + 4;
-    else
-      data_byte = data_byte%247;
-   end
+  end
 
 endtask
 
@@ -718,19 +688,18 @@ function automatic bit check_kernel_result();
   integer error_counter;
   error_counter = 0;
 
-  /////////////////////////////////////////////////////////////////////////////////////////////////
   // Checking memory connected to m00_axi
-  for (longint unsigned slot = 0; slot < 8; slot++) begin
-    ret_rd_value = m00_axi.mem_model.backdoor_memory_read_4byte(TargetIn_ptr + (slot * 4));
+  for (longint unsigned slot = 0; slot < LP_MAX_LENGTH; slot++) begin
+    ret_rd_value = m00_axi.mem_model.backdoor_memory_read_4byte(Data_ptr + (slot * 4));
     if (slot < LP_MAX_TRANSFER_LENGTH) begin
-      if (ret_rd_value != target[slot]) begin
-        $error("Memory Mismatch: m00_axi : @0x%x : Expected 0x%x -> Got 0x%x ", TargetIn_ptr + (slot * 4), slot + 1, ret_rd_value);
+      if (ret_rd_value != (slot + 1)) begin
+        $error("Memory Mismatch: m00_axi : @0x%x : Expected 0x%x -> Got 0x%x ", Data_ptr + (slot * 4), slot + 1, ret_rd_value);
         error_found |= 1;
         error_counter++;
       end
     end else begin
       if (ret_rd_value != slot) begin
-        $error("Memory Mismatch: m00_axi : @0x%x : Expected 0x%x -> Got 0x%x ", TargetIn_ptr + (slot * 4), slot, ret_rd_value);
+        $error("Memory Mismatch: m00_axi : @0x%x : Expected 0x%x -> Got 0x%x ", Data_ptr + (slot * 4), slot, ret_rd_value);
         error_found |= 1;
         error_counter++;
       end
@@ -826,7 +795,7 @@ initial begin : STIMULUS
 
   enable_interrupts();
 
-  multiple_iteration(2, error_found);
+  multiple_iteration(3, error_found);
   
   #200000;
   
