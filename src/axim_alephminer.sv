@@ -169,6 +169,7 @@ module axim_alephminer
   logic [1:0][31:0] group_directions_2;
   logic [1:0][31:0] groups_2;
   logic [1:0][31:0] chunk_length_2;
+  logic [1:0][31:0] headerblob_num_2;
 
   ///////////////////////////////////////////////////////////////////////////////
   // Begin RTL
@@ -375,7 +376,7 @@ module axim_alephminer
       HEADERBLOB_ST: begin
         if(ap_start_pulse)
           next_state <= TARGET_ST;
-        else if(idx==(headerblob_num-1))
+        else if(idx==(headerblob_num_2[1]-1))
           next_state <= RD_IDLE;
       end//HEADERBLOB_ST
 
@@ -434,7 +435,7 @@ module axim_alephminer
         HEADERBLOB_ST: begin
           update_miner <= 1'b0;      
           headerblob <= rd_fifo_data;
-          if(idx<(headerblob_num)) begin
+          if(idx<(headerblob_num_2[1])) begin
             wr <= 1'b1;
             idx <= idx + 1;
             rd_fifo_rd_en <= 1'b1; 
@@ -465,12 +466,14 @@ module axim_alephminer
       group_directions_2 <= 0;
       groups_2 <= 0;
       chunk_length_2 <= 0;
+      headerblob_num_2 <= 0;
     end 
     else begin
       ap_done_2 <= {ap_done_2[0],ap_done};
       group_directions_2 <= {group_directions_2[0],group_directions};
       groups_2 <= {groups_2[0],groups_w};
       chunk_length_2 <= {chunk_length_2[0],chunk_length};
+      headerblob_num_2 <= {headerblob_num_2[0],headerblob_num};
     end
   end
 
