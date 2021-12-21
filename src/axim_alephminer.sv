@@ -170,6 +170,7 @@ module axim_alephminer
   logic [1:0][31:0] groups_2;
   logic [1:0][31:0] chunk_length_2;
   logic [1:0][31:0] headerblob_num_2;
+  logic [1:0][31:0] miningsteps_2;
 
   ///////////////////////////////////////////////////////////////////////////////
   // Begin RTL
@@ -467,6 +468,7 @@ module axim_alephminer
       groups_2 <= 0;
       chunk_length_2 <= 0;
       headerblob_num_2 <= 0;
+      miningsteps_2 <= 0;
     end 
     else begin
       ap_done_2 <= {ap_done_2[0],ap_done};
@@ -474,6 +476,7 @@ module axim_alephminer
       groups_2 <= {groups_2[0],groups_w};
       chunk_length_2 <= {chunk_length_2[0],chunk_length};
       headerblob_num_2 <= {headerblob_num_2[0],headerblob_num};
+      miningsteps_2 <= {miningsteps_2[0],MiningSteps};
     end
   end
 
@@ -521,7 +524,7 @@ module axim_alephminer
       miner_rdy_reg <= (|miner_rdy);
   end
   
-  assign invld_hash = (hash_cntr[0]==MiningSteps && !miner_rdy_reg);
+  assign invld_hash = (hash_cntr[0]==miningsteps_2[1] && !miner_rdy_reg);
   
   always_ff@(posedge ap_clk_2 or negedge areset_n_2)
   begin : invalid_hash_reg
